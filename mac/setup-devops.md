@@ -26,6 +26,18 @@ brew install kind minikube tilt
 brew install --cask orbstack
 ```
 
+## Remote Connection Management
+
+**[XPipe](https://xpipe.io)** — connection hub for SSH, RDP, VNC, containers, and VMs. Stores all your hosts in one place, handles SSH tunneling automatically, and launches the appropriate client for RDP/VNC.
+
+```bash
+brew install --cask xpipe-io/tap/xpipe
+```
+
+> **RDP from XPipe:** XPipe tunnels the connection (through SSH if needed) and hands off to **Microsoft Remote Desktop** — install it from the App Store if you haven't already. Configure the RDP target in XPipe and it opens automatically in the external client.
+
+> **VNC from XPipe:** Same pattern — XPipe manages the tunnel, macOS Screen Sharing or a VNC viewer handles the display.
+
 ## API & Database
 
 ```bash
@@ -57,3 +69,4 @@ brew install direnv
 | [DBeaver](https://dbeaver.io) | Universal database GUI — connects to Postgres, MySQL, SQLite, and more | https://dbeaver.io |
 | [Proxyman](https://proxyman.io) | Intercept and inspect HTTP/HTTPS traffic — essential for debugging AI agent calls | https://proxyman.io |
 | [direnv](https://direnv.net) | Automatically load/unload environment variables when you `cd` into a project folder | https://direnv.net |
+| [XPipe](https://xpipe.io) | Connection hub — SSH, RDP, VNC, containers, VMs; handles tunneling and launches external clients | https://xpipe.io |
