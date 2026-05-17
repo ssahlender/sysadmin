@@ -43,3 +43,10 @@ open ~/data/rocrail/Rocrail.app
 ```
 
 No systemd involved.
+
+## License
+
+Put the lic.dat in the base dir
+
+- Linux: ```/opt/rocail/lic.dat```
+- macOS: ```~/data/rocrail.lic.dat```
