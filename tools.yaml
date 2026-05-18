@@ -1,0 +1,1121 @@
+# Canonical tool list — single source of truth for all platforms
+# 🧠 = suggested by deepseek (not from user's original config)
+
+- name: git
+  desc: Version control
+  cat: cli
+  sub: core
+  link: https://git-scm.com
+  mac: brew install git
+  linux: brew install git
+  windows: winget install Git.Git
+
+- name: gh
+  desc: GitHub CLI — PRs, issues, repo management
+  cat: cli
+  sub: core
+  link: https://cli.github.com
+  mac: brew install gh
+  linux: brew install gh
+  windows: winget install GitHub.cli
+
+- name: wget
+  desc: Download files from the terminal
+  cat: cli
+  sub: core
+  link: https://www.gnu.org/software/wget/
+  mac: brew install wget
+  linux: brew install wget
+  windows: winget install GNU.Wget
+
+- name: curl
+  desc: Transfer data to/from URLs — used by almost every script internally
+  cat: cli
+  sub: core
+  link: https://curl.se
+  mac: brew install curl
+  linux: brew install curl
+  windows: winget install curl.curl
+
+- name: jq
+  desc: Parse and filter JSON output
+  cat: cli
+  sub: core
+  link: https://jqlang.github.io/jq/
+  mac: brew install jq
+  linux: brew install jq
+  windows: winget install jqlang.jq
+
+- name: yq
+  desc: Parse and filter YAML — great for k8s manifests and config
+  cat: cli
+  sub: core
+  link: https://github.com/mikefarah/yq
+  mac: brew install yq
+  linux: brew install yq
+  windows: winget install MikeFarah.yq
+
+- name: tree
+  desc: Show directory structure as a visual tree
+  cat: cli
+  sub: core
+  link: https://oldmanprogrammer.net/source.php?dir=projects/tree
+  mac: brew install tree
+  linux: brew install tree
+  windows: winget install tree
+
+- name: fzf
+  desc: Fuzzy finder — interactively search files, history, or any list
+  cat: cli
+  sub: core
+  link: https://github.com/junegunn/fzf
+  mac: brew install fzf
+  linux: brew install fzf
+  windows: winget install junegunn.fzf
+
+- name: ripgrep
+  desc: Search file contents blazingly fast — like grep but much quicker
+  cat: cli
+  sub: core
+  link: https://github.com/BurntSushi/ripgrep
+  mac: brew install ripgrep
+  linux: brew install ripgrep
+  windows: winget install BurntSushi.ripgrep.MSVC
+
+- name: fd
+  desc: Find files by name fast — simpler syntax than find
+  cat: cli
+  sub: core
+  link: https://github.com/sharkdp/fd
+  mac: brew install fd
+  linux: brew install fd
+  windows: winget install sharkdp.fd
+
+- name: bat
+  desc: cat with syntax highlighting and line numbers
+  cat: cli
+  sub: core
+  link: https://github.com/sharkdp/bat
+  mac: brew install bat
+  linux: brew install bat
+  windows: winget install sharkdp.bat
+
+- name: eza
+  desc: Modern ls with colors, icons, and Git status
+  cat: cli
+  sub: core
+  link: https://github.com/eza-community/eza
+  mac: brew install eza
+  linux: brew install eza
+  windows: winget install eza-community.eza
+
+- name: zoxide
+  desc: Smarter cd — jump to any recent folder with z <name>
+  cat: cli
+  sub: core
+  link: https://github.com/ajeetdsouza/zoxide
+  mac: brew install zoxide
+  linux: brew install zoxide
+  windows: winget install ajeetdsouza.zoxide
+
+- name: tmux
+  desc: Terminal multiplexer — split panes, persistent sessions
+  cat: cli
+  sub: core
+  link: https://github.com/tmux/tmux
+  mac: brew install tmux
+  linux: brew install tmux
+  windows: (WSL only — or use Windows Terminal panes)
+
+- name: htop
+  desc: Interactive process/CPU/memory viewer
+  cat: cli
+  sub: core
+  link: https://htop.dev
+  mac: brew install htop
+  linux: brew install htop
+  windows: (WSL only)
+
+- name: btop
+  desc: Beautiful graphs for CPU, memory, network, and disk
+  cat: cli
+  sub: core
+  link: https://github.com/aristocratos/btop
+  mac: brew install btop
+  linux: brew install btop
+  windows: (WSL only)
+
+- name: fastfetch
+  desc: System info banner — OS, CPU, RAM, shell at a glance
+  cat: cli
+  sub: core
+  link: https://github.com/fastfetch-cli/fastfetch
+  mac: brew install fastfetch
+  linux: brew install fastfetch
+  windows: winget install fastfetch
+
+# --- Shell ---
+
+- name: starship
+  desc: Customizable shell prompt — shows git branch, language versions, etc
+  cat: cli
+  sub: shell
+  link: https://starship.rs
+  mac: brew install starship
+  linux: brew install starship
+  windows: winget install Starship.Starship
+
+- name: zsh-autosuggestions
+  desc: Suggests commands as you type based on history
+  cat: cli
+  sub: shell
+  link: https://github.com/zsh-users/zsh-autosuggestions
+  mac: brew install zsh-autosuggestions
+  linux: brew install zsh-autosuggestions
+  windows: (zsh on WSL only)
+
+- name: zsh-syntax-highlighting
+  desc: Colors valid commands green and typos red before you hit Enter
+  cat: cli
+  sub: shell
+  link: https://github.com/zsh-users/zsh-syntax-highlighting
+  mac: brew install zsh-syntax-highlighting
+  linux: brew install zsh-syntax-highlighting
+  windows: (zsh on WSL only)
+
+- name: lazygit
+  desc: Visual Git interface in terminal — stage, commit, branch, rebase with keys
+  cat: cli
+  sub: shell
+  link: https://github.com/jesseduffield/lazygit
+  mac: brew install lazygit
+  linux: brew install lazygit
+  windows: winget install JesseDuffield.lazygit
+
+- name: mise
+  desc: Manage Node, Python, Ruby, Go versions per project — replaces nvm+pyenv+rbenv
+  cat: cli
+  sub: shell
+  link: https://mise.jdx.dev
+  mac: brew install mise
+  linux: brew install mise
+  windows: winget install jdx.mise
+
+- name: direnv
+  desc: Auto-load/unload env vars when you cd into a project
+  cat: cli
+  sub: shell
+  link: https://direnv.net
+  mac: brew install direnv
+  linux: brew install direnv
+  windows: winget install direnv.direnv
+
+# 🧠
+
+- name: atuin
+  desc: Magical shell history with sync, search, and stats
+  cat: cli
+  sub: shell
+  link: https://atuin.sh
+  mac: brew install atuin
+  linux: brew install atuin
+  windows: winget install atuinsh.atuin
+  note: 🧠
+
+- name: chezmoi
+  desc: Dotfile manager — version-control your entire home config
+  cat: cli
+  sub: shell
+  link: https://chezmoi.io
+  mac: brew install chezmoi
+  linux: brew install chezmoi
+  windows: winget install twpayne.chezmoi
+  note: 🧠
+
+# --- DevOps CLI ---
+
+- name: kubectl
+  desc: Deploy and manage apps on Kubernetes
+  cat: cli
+  sub: devops
+  link: https://kubernetes.io/docs/reference/kubectl/
+  mac: brew install kubectl
+  linux: brew install kubectl
+  windows: winget install Kubernetes.kubectl
+
+- name: helm
+  desc: Package manager for Kubernetes
+  cat: cli
+  sub: devops
+  link: https://helm.sh
+  mac: brew install helm
+  linux: brew install helm
+  windows: winget install Helm.Helm
+
+- name: k9s
+  desc: Terminal dashboard for Kubernetes — browse pods, logs, resources
+  cat: cli
+  sub: devops
+  link: https://k9scli.io
+  mac: brew install k9s
+  linux: brew install k9s
+  windows: winget install derailed.k9s
+
+- name: kubectx
+  desc: Fast kubectl context switching
+  cat: cli
+  sub: devops
+  link: https://github.com/ahmetb/kubectx
+  mac: brew install kubectx
+  linux: brew install kubectx
+  windows: winget install ahmetb.kubectx
+  note: 🧠
+
+- name: stern
+  desc: Multi-pod log tailing for Kubernetes
+  cat: cli
+  sub: devops
+  link: https://github.com/stern/stern
+  mac: brew install stern
+  linux: brew install stern
+  windows: winget install stern.stern
+  note: 🧠
+
+- name: opentofu
+  desc: Open-source Terraform fork, fully compatible
+  cat: cli
+  sub: devops
+  link: https://opentofu.org
+  mac: brew install opentofu
+  linux: brew install opentofu
+  windows: winget install OpenTofu.Tofu
+  alt: terraform
+
+- name: terraform
+  desc: Define cloud infrastructure as code
+  cat: cli
+  sub: devops
+  link: https://www.terraform.io
+  mac: brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+  linux: brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+  windows: winget install HashiCorp.Terraform
+  alt: opentofu
+
+- name: ansible
+  desc: Automate server configuration over SSH — no agent required
+  cat: cli
+  sub: devops
+  link: https://www.ansible.com
+  mac: brew install ansible
+  linux: brew install ansible
+  windows: (WSL only — or pipx install ansible)
+
+- name: awscli
+  desc: Official CLI for Amazon Web Services
+  cat: cli
+  sub: devops
+  link: https://aws.amazon.com/cli/
+  mac: brew install awscli
+  linux: brew install awscli
+  windows: winget install Amazon.AWSCLI
+
+- name: azure-cli
+  desc: Official CLI for Microsoft Azure
+  cat: cli
+  sub: devops
+  link: https://docs.microsoft.com/cli/azure/
+  mac: brew install azure-cli
+  linux: brew install azure-cli
+  windows: winget install Microsoft.AzureCLI
+
+- name: gcloud
+  desc: Official CLI for Google Cloud (gcloud, gsutil, bq)
+  cat: cli
+  sub: devops
+  link: https://cloud.google.com/sdk
+  mac: brew install google-cloud-sdk
+  linux: brew install google-cloud-sdk
+  windows: winget install Google.CloudSDK
+
+- name: age
+  desc: Simple, modern file encryption
+  cat: cli
+  sub: devops
+  link: https://github.com/FiloSottile/age
+  mac: brew install age
+  linux: brew install age
+  windows: winget install FiloSottile.age
+
+- name: sops
+  desc: Encrypt secrets inside YAML/JSON/ENV files — safely commit to Git
+  cat: cli
+  sub: devops
+  link: https://github.com/getsops/sops
+  mac: brew install sops
+  linux: brew install sops
+  windows: winget install Mozilla.sops
+
+- name: gnupg
+  desc: GPG encryption — sign commits, encrypt files, used by sops
+  cat: cli
+  sub: devops
+  link: https://gnupg.org
+  mac: brew install gnupg
+  linux: brew install gnupg
+  windows: winget install GnuPG.GnuPG
+
+- name: pinentry-mac
+  desc: Native macOS password dialog for GPG
+  cat: cli
+  sub: devops
+  link: https://github.com/GPGTools/pinentry
+  mac: brew install pinentry-mac
+  linux: apt install pinentry-curses
+  windows: (use pinentry-w64 via Gpg4win)
+
+- name: mosh
+  desc: SSH replacement that stays connected over flaky Wi-Fi or sleep
+  cat: cli
+  sub: devops
+  link: https://mosh.org
+  mac: brew install mosh
+  linux: brew install mosh
+  windows: (WSL only — or use Chrome SSH extension)
+
+- name: kind
+  desc: Run a local Kubernetes cluster inside Docker — great for testing
+  cat: cli
+  sub: devops
+  link: https://kind.sigs.k8s.io
+  mac: brew install kind
+  linux: brew install kind
+  windows: winget install Kubernetes.kind
+
+- name: minikube
+  desc: Single-node local Kubernetes cluster — easy to start
+  cat: cli
+  sub: devops
+  link: https://minikube.sigs.k8s.io
+  mac: brew install minikube
+  linux: brew install minikube
+  windows: winget install Kubernetes.minikube
+
+- name: tilt
+  desc: Hot-reload your app in a local k8s cluster as you save code
+  cat: cli
+  sub: devops
+  link: https://tilt.dev
+  mac: brew install tilt
+  linux: brew install tilt
+  windows: winget install tilt-dev.tilt
+
+- name: trivy
+  desc: Vulnerability scanner for containers, filesystems, and git repos
+  cat: cli
+  sub: devops
+  link: https://trivy.dev
+  mac: brew install trivy
+  linux: brew install trivy
+  windows: winget install AquaSecurity.Trivy
+  note: 🧠
+
+- name: kustomize
+  desc: Kubernetes native configuration management
+  cat: cli
+  sub: devops
+  link: https://kustomize.io
+  mac: brew install kustomize
+  linux: brew install kustomize
+  windows: winget install Kubernetes.kustomize
+  note: 🧠
+
+# --- Extra CLI ---
+
+- name: dust
+  desc: Disk usage visualizer — intuitive du replacement
+  cat: cli
+  sub: extra
+  link: https://github.com/bootandy/dust
+  mac: brew install dust
+  linux: brew install dust
+  windows: winget install bootandy.dust
+  note: 🧠
+
+- name: duf
+  desc: Prettier df — disk usage/free utility
+  cat: cli
+  sub: extra
+  link: https://github.com/muesli/duf
+  mac: brew install duf
+  linux: brew install duf
+  windows: winget install muesli.duf
+  note: 🧠
+
+- name: delta
+  desc: Syntax-highlighting pager for git diff
+  cat: cli
+  sub: extra
+  link: https://github.com/dandavison/delta
+  mac: brew install git-delta
+  linux: brew install git-delta
+  windows: winget install dandavison.delta
+  note: 🧠
+
+- name: sd
+  desc: Intuitive find & replace — sed alternative
+  cat: cli
+  sub: extra
+  link: https://github.com/chmln/sd
+  mac: brew install sd
+  linux: brew install sd
+  windows: winget install chmln.sd
+  note: 🧠
+
+- name: difftastic
+  desc: Structural diff tool — understands code syntax
+  cat: cli
+  sub: extra
+  link: https://difftastic.wilfred.me.uk
+  mac: brew install difftastic
+  linux: brew install difftastic
+  windows: winget install Wilfred.difftastic
+  note: 🧠
+
+- name: tldr
+  desc: Simplified man pages with practical examples
+  cat: cli
+  sub: extra
+  link: https://tldr.sh
+  mac: brew install tldr
+  linux: brew install tldr
+  windows: winget install tealdeer-rs.tealdeer
+  note: 🧠
+
+- name: hyperfine
+  desc: Command-line benchmarking tool
+  cat: cli
+  sub: extra
+  link: https://github.com/sharkdp/hyperfine
+  mac: brew install hyperfine
+  linux: brew install hyperfine
+  windows: winget install sharkdp.hyperfine
+  note: 🧠
+
+- name: just
+  desc: Command runner — Makefile alternative with sane syntax
+  cat: cli
+  sub: extra
+  link: https://github.com/casey/just
+  mac: brew install just
+  linux: brew install just
+  windows: winget install Casey.Just
+  note: 🧠
+
+- name: watchexec
+  desc: Watch files and run commands on change
+  cat: cli
+  sub: extra
+  link: https://github.com/watchexec/watchexec
+  mac: brew install watchexec
+  linux: brew install watchexec
+  windows: winget install watchexec.watchexec
+  note: 🧠
+
+- name: restic
+  desc: Modern encrypted backup tool — deduplicated, snapshot-based
+  cat: cli
+  sub: extra
+  link: https://restic.net
+  mac: brew install restic
+  linux: brew install restic
+  windows: winget install restic.restic
+  note: 🧠
+
+- name: yazi
+  desc: Terminal file manager — image previews, vim keybindings
+  cat: cli
+  sub: extra
+  link: https://yazi-rs.github.io
+  mac: brew install yazi
+  linux: brew install yazi
+  windows: winget install sxyazi.yazi
+  note: 🧠
+
+# --- Git Tools ---
+
+- name: mani
+  desc: Git repo sync — manage multiple repos with a config file
+  cat: cli
+  sub: git
+  link: https://github.com/alajmo/mani
+  mac: brew install alajmo/mani/mani
+  linux: brew install alajmo/mani/mani
+  windows: winget install alajmo.mani
+
+- name: gita
+  desc: Git repo sync — manage multiple repos side-by-side
+  cat: cli
+  sub: git
+  link: https://github.com/nosarthur/gita
+  mac: pipx install gita
+  linux: pipx install gita
+  windows: pipx install gita
+
+# --- AI / LLM ---
+
+- name: ollama
+  desc: Run LLMs locally via CLI and REST API
+  cat: ai
+  sub: runtime
+  link: https://ollama.com
+  mac: brew install ollama
+  linux: brew install ollama
+  windows: winget install Ollama.Ollama
+
+- name: lm-studio
+  desc: GUI for local models, OpenAI-compatible server
+  cat: ai
+  sub: runtime
+  link: https://lmstudio.ai
+  mac: brew install --cask lm-studio
+  linux: (AppImage from https://lmstudio.ai)
+  windows: winget install LMStudio.LMStudio
+
+- name: claude-code
+  desc: Anthropic's agentic coding CLI
+  cat: ai
+  sub: agent
+  link: https://www.anthropic.com/claude-code
+  mac: brew install --cask claude-code
+  linux: brew install claude-code
+  windows: (WSL only — or npm install -g @anthropic-ai/claude-code)
+
+- name: codex
+  desc: OpenAI's agentic coding CLI
+  cat: ai
+  sub: agent
+  link: https://github.com/openai/codex
+  mac: brew install --cask codex
+  linux: brew install codex
+  windows: (WSL only)
+
+- name: opencode
+  desc: Model-flexible, open source, Ollama support
+  cat: ai
+  sub: agent
+  link: https://github.com/sst/opencode
+  mac: brew install opencode
+  linux: brew install opencode
+  windows: (WSL only)
+
+- name: aider-chat
+  desc: Git-aware coding assistant
+  cat: ai
+  sub: agent
+  link: https://aider.chat
+  mac: pipx install aider-chat
+  linux: pipx install aider-chat
+  windows: pipx install aider-chat
+
+- name: gemini-cli
+  desc: Google's agent CLI
+  cat: ai
+  sub: agent
+  link: https://github.com/google-gemini/gemini-cli
+  mac: npm install -g @google/gemini-cli
+  linux: npm install -g @google/gemini-cli
+  windows: npm install -g @google/gemini-cli
+
+- name: claude-squad
+  desc: Terminal multiplexer for Claude Code + Aider + Codex
+  cat: ai
+  sub: agent
+  link: https://github.com/smtg-ai/claude-squad
+  mac: brew install claude-squad
+  linux: brew install claude-squad
+  windows: (WSL only)
+
+# --- GUI: Editor ---
+
+- name: visual-studio-code
+  desc: Main code editor
+  cat: gui
+  sub: editor
+  link: https://code.visualstudio.com
+  mac: brew install --cask visual-studio-code
+  linux: (download .deb/.rpm from https://code.visualstudio.com)
+  windows: winget install Microsoft.VisualStudioCode
+
+- name: marktext
+  desc: Markdown editor — real-time preview, follows internal links
+  cat: gui
+  sub: editor
+  link: https://marktext.app
+  mac: brew install --cask mark-text
+  linux: (AppImage from https://marktext.app)
+  windows: winget install MarkText.MarkText
+  note: 🧠
+
+# --- GUI: Terminal ---
+
+- name: iterm2
+  desc: Feature-rich macOS terminal
+  cat: gui
+  sub: terminal
+  link: https://iterm2.com
+  mac: brew install --cask iterm2
+  linux: (use Ghostty or Alacritty instead)
+  windows: (use Windows Terminal)
+
+- name: ghostty
+  desc: GPU-accelerated terminal, native macOS/Linux
+  cat: gui
+  sub: terminal
+  link: https://ghostty.org
+  mac: brew install --cask ghostty
+  linux: brew install ghostty
+  windows: (WSL2 + Windows Terminal)
+
+# --- GUI: Mac Utilities ---
+
+- name: raycast
+  desc: Launcher + AI + automation
+  cat: gui
+  sub: mac-utils
+  link: https://www.raycast.com
+  mac: brew install --cask raycast
+  linux: (use Ulauncher or Albert)
+  windows: (use PowerToys Run)
+
+- name: rectangle
+  desc: Window snapping for macOS
+  cat: gui
+  sub: mac-utils
+  link: https://rectangleapp.com
+  mac: brew install --cask rectangle
+  linux: (use i3/Sway tiling WM)
+  windows: (use PowerToys FancyZones)
+
+- name: thaw
+  desc: Menu bar manager — modern Hidden Bar replacement
+  cat: gui
+  sub: mac-utils
+  link: https://github.com/stonerl/Thaw
+  mac: brew install --cask thaw
+  linux: (not applicable)
+  windows: (not applicable)
+  alt: hidden-bar
+
+- name: pearcleaner
+  desc: App uninstaller — sorts by size, Homebrew integration
+  cat: gui
+  sub: mac-utils
+  link: https://itsalin.com/appInfo/?id=pearcleaner
+  mac: brew install --cask pearcleaner
+  linux: (not applicable — package managers handle cleanup)
+  windows: (use Revo Uninstaller or Geek Uninstaller)
+  alt: appcleaner
+
+- name: dockdoor
+  desc: Window previews on Dock hover + visual Cmd+Tab switcher
+  cat: gui
+  sub: mac-utils
+  link: https://dockdoor.net
+  mac: brew install --cask dockdoor
+  linux: (not applicable)
+  windows: (not applicable)
+
+- name: knockknock
+  desc: Scans persistent background processes, VirusTotal check
+  cat: gui
+  sub: mac-utils
+  link: https://objective-see.org/products/knockknock.html
+  mac: brew install --cask knockknock
+  linux: (use rkhunter or chkrootkit)
+  windows: (use Autoruns from Sysinternals)
+
+- name: snippetslab
+  desc: Code + text snippet manager, syntax highlighting, iCloud sync
+  cat: gui
+  sub: mac-utils
+  link: https://apps.apple.com/app/id1006087419
+  mac: (App Store only)
+  linux: (use massCode or Snipper)
+  windows: (use massCode)
+
+- name: latest
+  desc: Checks updates for all Sparkle-based and App Store apps
+  cat: gui
+  sub: mac-utils
+  link: https://max.codes/latest
+  mac: (direct download)
+  linux: (not needed — package managers handle updates)
+  windows: (use winget upgrade)
+
+- name: stim
+  desc: Keep-awake utility — can be tied to specific running apps
+  cat: gui
+  sub: mac-utils
+  link: https://widgetworx.com/apps/stim.html
+  mac: (direct download)
+  linux: (use caffeine-ng)
+  windows: (use PowerToys Awake)
+
+# --- GUI: DevOps ---
+
+- name: orbstack
+  desc: Lightweight Docker + Linux VM for Apple Silicon — replaces Docker Desktop
+  cat: gui
+  sub: devops
+  link: https://orbstack.dev
+  mac: brew install --cask orbstack
+  linux: (use native Docker Engine — no wrapper needed)
+  windows: (use Docker Desktop)
+
+- name: bruno
+  desc: API client — offline, file-based, free Postman alternative
+  cat: gui
+  sub: devops
+  link: https://www.usebruno.com
+  mac: brew install --cask bruno
+  linux: (AppImage / .deb from https://www.usebruno.com)
+  windows: winget install usebruno.Bruno
+
+- name: dbeaver-community
+  desc: Universal database GUI — Postgres, MySQL, SQLite, and more
+  cat: gui
+  sub: devops
+  link: https://dbeaver.io
+  mac: brew install --cask dbeaver-community
+  linux: (flatpak install dbeaver or .deb from dbeaver.io)
+  windows: winget install dbeaver.dbeaver
+
+- name: proxyman
+  desc: Intercept and inspect HTTP/HTTPS traffic — macOS-native
+  cat: gui
+  sub: devops
+  link: https://proxyman.io
+  mac: brew install --cask proxyman
+  linux: (use mitmproxy — brew install mitmproxy or pipx install mitmproxy)
+  windows: (use mitmproxy or Fiddler)
+
+- name: mitmproxy
+  desc: HTTP proxy — CLI + web UI, open source
+  cat: cli
+  sub: devops
+  link: https://mitmproxy.org
+  mac: brew install mitmproxy
+  linux: brew install mitmproxy
+  windows: winget install mitmproxy.mitmproxy
+
+- name: lens
+  desc: Kubernetes IDE — GUI dashboard for clusters
+  cat: gui
+  sub: devops
+  link: https://k8slens.dev
+  mac: brew install --cask lens
+  linux: (AppImage from https://k8slens.dev)
+  windows: winget install Mirantis.Lens
+  note: 🧠
+
+- name: xpipe
+  desc: Connection hub — SSH, RDP, VNC, containers, VMs
+  cat: gui
+  sub: devops
+  link: https://xpipe.io
+  mac: brew install --cask xpipe-io/tap/xpipe
+  linux: (AppImage from https://xpipe.io)
+  windows: winget install xpipe-io.xpipe
+
+# --- GUI: Productivity ---
+
+- name: microsoft-office
+  desc: Word, Excel, PowerPoint, Teams, OneDrive
+  cat: gui
+  sub: productivity
+  link: https://www.microsoft.com/microsoft-365/mac
+  mac: brew install --cask microsoft-office
+  linux: (use LibreOffice or Microsoft 365 web)
+  windows: (preinstalled or Microsoft 365)
+
+- name: libreoffice
+  desc: Free Office suite — opens and edits Word/Excel/PowerPoint files
+  cat: gui
+  sub: productivity
+  link: https://www.libreoffice.org
+  mac: brew install --cask libreoffice
+  linux: apt install libreoffice
+  windows: winget install TheDocumentFoundation.LibreOffice
+
+- name: obsidian
+  desc: Local-first Markdown notes with linking between notes
+  cat: gui
+  sub: productivity
+  link: https://obsidian.md
+  mac: brew install --cask obsidian
+  linux: (AppImage from https://obsidian.md)
+  windows: winget install Obsidian.Obsidian
+
+- name: notion
+  desc: All-in-one workspace for notes, wikis, and project tracking
+  cat: gui
+  sub: productivity
+  link: https://www.notion.so
+  mac: brew install --cask notion
+  linux: (web app — or unofficial electron wrapper)
+  windows: winget install Notion.Notion
+
+- name: slack
+  desc: Team messaging and channels
+  cat: gui
+  sub: productivity
+  link: https://slack.com
+  mac: brew install --cask slack
+  linux: (flatpak install slack — or .deb from slack.com)
+  windows: winget install SlackTechnologies.Slack
+
+- name: zoom
+  desc: Video conferencing
+  cat: gui
+  sub: productivity
+  link: https://zoom.us
+  mac: brew install --cask zoom
+  linux: (flatpak install zoom — or .deb from zoom.us)
+  windows: winget install Zoom.Zoom
+
+- name: whatsapp
+  desc: Encrypted messaging — desktop client
+  cat: gui
+  sub: productivity
+  link: https://www.whatsapp.com
+  mac: brew install --cask whatsapp
+  linux: (flatpak install whatsapp — or web.whatsapp.com)
+  windows: winget install WhatsApp.WhatsApp
+
+- name: signal
+  desc: Encrypted messaging, open source — more private than WhatsApp
+  cat: gui
+  sub: productivity
+  link: https://signal.org
+  mac: brew install --cask signal
+  linux: (flatpak install signal — or .deb from signal.org)
+  windows: winget install Signal.Signal
+
+- name: bitwarden
+  desc: Open-source password manager
+  cat: gui
+  sub: productivity
+  link: https://bitwarden.com
+  mac: brew install --cask bitwarden
+  linux: (flatpak install bitwarden — or AppImage)
+  windows: winget install Bitwarden.Bitwarden
+
+- name: 1password
+  desc: Password manager with SSH key management and developer CLI
+  cat: gui
+  sub: productivity
+  link: https://1password.com
+  mac: brew install --cask 1password
+  linux: (1password-cli via brew — GUI via .deb from 1password.com)
+  windows: winget install AgileBits.1Password
+
+- name: resilio-sync
+  desc: Peer-to-peer file sync across devices — no cloud middleman
+  cat: gui
+  sub: productivity
+  link: https://www.resilio.com/
+  mac: brew install --cask resilio-sync
+  linux: (flatpak install resilio-sync — or .deb from resilio.com)
+  windows: winget install Resilio.ResilioSync
+
+- name: wireguard
+  desc: Fast, modern VPN
+  cat: gui
+  sub: productivity
+  link: https://www.wireguard.com
+  mac: (App Store — free)
+  linux: apt install wireguard-tools
+  windows: winget install WireGuard.WireGuard
+
+- name: adobe-acrobat-reader
+  desc: View, comment, and sign PDF files
+  cat: gui
+  sub: productivity
+  link: https://get.adobe.com/reader/
+  mac: brew install --cask adobe-acrobat-reader
+  linux: (use Okular or Evince)
+  windows: winget install Adobe.Acrobat.Reader.64-bit
+
+- name: pdf-expert
+  desc: Edit, annotate, and sign PDFs
+  cat: gui
+  sub: productivity
+  link: https://pdfexpert.com
+  mac: brew install --cask pdf-expert
+  linux: (use Okular)
+  windows: (use PDF-XChange Editor or Foxit)
+
+# --- GUI: Browser ---
+
+- name: google-chrome
+  desc: Web browser
+  cat: gui
+  sub: browser
+  link: https://www.google.com/chrome/
+  mac: brew install --cask google-chrome
+  linux: (download .deb/.rpm from google.com/chrome)
+  windows: winget install Google.Chrome
+
+- name: firefox
+  desc: Web browser — open-source
+  cat: gui
+  sub: browser
+  link: https://www.mozilla.org/firefox/
+  mac: brew install --cask firefox
+  linux: apt install firefox
+  windows: winget install Mozilla.Firefox
+
+- name: microsoft-edge
+  desc: Web browser
+  cat: gui
+  sub: browser
+  link: https://www.microsoft.com/edge
+  mac: brew install --cask microsoft-edge
+  linux: (download .deb/.rpm from microsoft.com/edge)
+  windows: (preinstalled)
+
+- name: brave-browser
+  desc: Privacy-focused web browser with built-in ad blocking
+  cat: gui
+  sub: browser
+  link: https://brave.com
+  mac: brew install --cask brave-browser
+  linux: (flatpak install brave — or .deb/.rpm from brave.com)
+  windows: winget install Brave.Brave
+
+# --- GUI: File Manager ---
+
+- name: nimble-commander
+  desc: Dual-pane file manager — most Mac-native feel
+  cat: gui
+  sub: file-manager
+  link: https://magnumbytes.com
+  mac: brew install --cask nimble-commander
+  linux: (use double-commander or krusader)
+  windows: (use Total Commander or OneCommander)
+
+- name: qspace-pro
+  desc: Multi-pane file manager — up to 4 panes, cloud/remote support
+  cat: gui
+  sub: file-manager
+  link: https://qspace.awehunt.com
+  mac: (App Store only — search QSpace Pro)
+  linux: (use double-commander)
+  windows: (use OneCommander)
+
+- name: double-commander
+  desc: Total Commander clone — maximum features, cross-platform
+  cat: gui
+  sub: file-manager
+  link: https://doublecmd.sourceforge.io
+  mac: brew install --cask double-commander
+  linux: apt install doublecmd-gtk
+  windows: winget install doublecmd.doublecmd
+
+- name: mucommander
+  desc: Cross-platform Java file manager — solid if less native
+  cat: gui
+  sub: file-manager
+  link: https://www.mucommander.com
+  mac: brew install --cask mucommander
+  linux: (download .tar.gz from mucommander.com)
+  windows: winget install muCommander.muCommander
+
+# --- GUI: Virtualization ---
+
+- name: parallels
+  desc: Windows VM on Mac — best integration, ~$100/yr
+  cat: gui
+  sub: vm
+  link: https://www.parallels.com
+  mac: brew install --cask parallels
+  linux: (use KVM/QEMU)
+  windows: (not applicable)
+
+- name: utm
+  desc: Free VM on Mac — more manual setup
+  cat: gui
+  sub: vm
+  link: https://mac.getutm.app
+  mac: brew install --cask utm
+  linux: (use virt-manager + KVM)
+  windows: (use Hyper-V)
+
+- name: vmware-fusion
+  desc: Free personal-tier VM on Mac
+  cat: gui
+  sub: vm
+  link: https://www.vmware.com/products/fusion.html
+  mac: brew install --cask vmware-fusion
+  linux: (use KVM/QEMU)
+  windows: (use VMware Workstation)
+
+# --- Font ---
+
+- name: font-jetbrains-mono-nerd-font
+  desc: Nerd Font — JetBrains Mono with dev icons
+  cat: font
+  link: https://www.nerdfonts.com
+  mac: brew install --cask font-jetbrains-mono-nerd-font
+  linux: curl -fsSL https://raw.githubusercontent.com/ryanoasis/nerd-fonts/master/install.sh | bash -s -- JetBrainsMono
+  windows: winget install DEVCOM.JetBrainsMonoNerdFont
+
+# --- Languages & Package Managers ---
+
+- name: python
+  desc: Python runtime
+  cat: lang
+  link: https://www.python.org
+  mac: brew install python
+  linux: brew install python3
+  windows: winget install Python.Python.3
+
+- name: uv
+  desc: Fast Python package manager — replaces pip/venv
+  cat: lang
+  link: https://github.com/astral-sh/uv
+  mac: brew install uv
+  linux: brew install uv
+  windows: winget install astral-sh.uv
+
+- name: node
+  desc: Node.js runtime
+  cat: lang
+  link: https://nodejs.org
+  mac: brew install node
+  linux: brew install node
+  windows: winget install OpenJS.NodeJS
+
+- name: pnpm
+  desc: Fast, disk-efficient Node package manager
+  cat: lang
+  link: https://pnpm.io
+  mac: brew install pnpm
+  linux: brew install pnpm
+  windows: winget install pnpm.pnpm
+
+- name: bun
+  desc: All-in-one JS runtime — bundler, test runner, package manager
+  cat: lang
+  link: https://bun.sh
+  mac: brew install bun
+  linux: brew install bun
+  windows: winget install Oven-sh.Bun
+
+- name: pipx
+  desc: Install Python CLI tools in isolated environments
+  cat: lang
+  link: https://pipx.pypa.io
+  mac: brew install pipx
+  linux: brew install pipx
+  windows: winget install pipx
