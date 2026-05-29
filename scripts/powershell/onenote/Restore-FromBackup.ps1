@@ -111,7 +111,7 @@ $grouped = $allFiles | Group-Object {
     # Find the notebook name - it's the last folder component that doesn't look like
     # a Windows path component (not "Users", "OneDrive", "Sicherung", "Dokumente", etc.)
     $skipFolders = @('Users','OneDrive','Dokumente','Documents','AppData','Local',
-                     'Microsoft','OneNote','16.0','Sicherung','Backup','ssahl')
+                     'Microsoft','OneNote','16.0','Sicherung','Backup',$env:USERNAME)
     $nbIndex = 0
     for ($i = 0; $i -lt $parts.Count - 1; $i++) {
         if ($parts[$i] -notin $skipFolders) { $nbIndex = $i; break }
@@ -131,7 +131,7 @@ foreach ($nbGroup in $grouped) {
         $rel   = $file.FullName.Substring($snapshot.Length).TrimStart('\','/')
         $parts = $rel.Split('\')
         $skipFolders = @('Users','OneDrive','Dokumente','Documents','AppData','Local',
-                         'Microsoft','OneNote','16.0','Sicherung','Backup','ssahl')
+                         'Microsoft','OneNote','16.0','Sicherung','Backup',$env:USERNAME)
         $nbIndex = 0
         for ($i = 0; $i -lt $parts.Count - 1; $i++) {
             if ($parts[$i] -notin $skipFolders) { $nbIndex = $i; break }
