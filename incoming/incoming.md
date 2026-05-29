@@ -1,8 +1,3 @@
-# mani ... git repo sync
-https://github.com/alajmo/mani
+# incoming
 
-# gita ... git repo sync
-https://github.com/nosarthur/gita
-
-# Mole ... cleanup
-https://github.com/tw93/Mole
+Tools to evaluate before adding to the main list. Keep this directory empty once processed.
