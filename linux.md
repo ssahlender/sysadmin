@@ -18,6 +18,10 @@
 ```
 
 ```bash
+# Sublime Text — .deb/.rpm from https://www.sublimetext.com
+```
+
+```bash
 # Nerd Font
 curl -fsSL https://raw.githubusercontent.com/ryanoasis/nerd-fonts/master/install.sh | bash -s -- JetBrainsMono
 ```
@@ -40,6 +44,7 @@ brew install ghostty
 
 ```bash
 brew install git gh wget curl jq yq tree htop btop tmux fzf ripgrep fd bat eza zoxide fastfetch
+brew install ffmpeg imagemagick sevenzip
 ```
 
 **Git config:**
@@ -193,7 +198,7 @@ ollama pull mistral
 ## 12. Productivity & Office
 
 ```bash
-sudo apt install libreoffice wireguard-tools firefox
+sudo apt install libreoffice wireguard-tools firefox vlc
 ```
 
 | App | Install |
@@ -234,3 +239,5 @@ sudo apt install doublecmd-gtk
 | AppCleaner / Pearcleaner | Package managers handle cleanup |
 | KnockKnock | rkhunter or chkrootkit |
 | Parallels / UTM | KVM/QEMU + virt-manager |
+| Keka | File Roller or 7-Zip (`apt install p7zip-full`) |
+| Stats | btop or conky |

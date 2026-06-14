@@ -154,6 +154,33 @@
   linux: brew install fastfetch
   windows: winget install fastfetch
 
+- name: ffmpeg
+  desc: Convert, edit, and stream video/audio — swiss army knife for media
+  cat: cli
+  sub: core
+  link: https://ffmpeg.org
+  mac: brew install ffmpeg
+  linux: brew install ffmpeg
+  windows: winget install Gyan.FFmpeg
+
+- name: imagemagick
+  desc: Create, edit, and convert images from the command line
+  cat: cli
+  sub: core
+  link: https://imagemagick.org
+  mac: brew install imagemagick
+  linux: brew install imagemagick
+  windows: winget install ImageMagick.ImageMagick
+
+- name: sevenzip
+  desc: High-ratio compression in .7z format — also extracts 30+ archive types
+  cat: cli
+  sub: core
+  link: https://www.7-zip.org
+  mac: brew install sevenzip
+  linux: brew install sevenzip
+  windows: winget install 7zip.7zip
+
 # --- Shell ---
 
 - name: starship
@@ -656,6 +683,15 @@
   windows: winget install MarkText.MarkText
   note: 🧠
 
+- name: sublime-text
+  desc: Lightweight text editor — fast startup, great for notes and quick file edits
+  cat: gui
+  sub: editor
+  link: https://www.sublimetext.com
+  mac: brew install --cask sublime-text
+  linux: (download .deb/.rpm from sublimetext.com)
+  windows: winget install SublimeHQ.SublimeText.4
+
 # --- GUI: Terminal ---
 
 - name: iterm2
@@ -733,6 +769,44 @@
   mac: brew install --cask knockknock
   linux: (use rkhunter or chkrootkit)
   windows: (use Autoruns from Sysinternals)
+
+- name: alttab
+  desc: Windows-style Alt+Tab with window thumbnails — proper window switcher for macOS
+  cat: gui
+  sub: mac-utils
+  link: https://alt-tab-macos.netlify.app
+  mac: brew install --cask alt-tab
+  linux: (not applicable)
+  windows: (not applicable — built into Windows)
+
+- name: stats
+  desc: Menu bar system monitor — CPU, GPU, RAM, disk, network, sensors, battery
+  cat: gui
+  sub: mac-utils
+  link: https://github.com/exelban/stats
+  mac: brew install --cask stats
+  linux: (use btop or conky)
+  windows: (use Task Manager or btop)
+
+- name: keka
+  desc: Archive extractor for .rar, .7z, .tar and 20+ formats macOS can't open natively
+  cat: gui
+  sub: mac-utils
+  link: https://www.keka.io
+  mac: brew install --cask keka
+  linux: (use 7-Zip or File Roller)
+  windows: (use 7-Zip — built-in support for most formats)
+  alt: the-unarchiver
+
+- name: alfred
+  desc: Classic app launcher + workflows — the original Spotlight replacement
+  cat: gui
+  sub: mac-utils
+  link: https://www.alfredapp.com
+  mac: brew install --cask alfred
+  linux: (use Ulauncher or Albert)
+  windows: (use PowerToys Run)
+  alt: raycast
 
 - name: snippetslab
   desc: Code + text snippet manager, syntax highlighting, iCloud sync
@@ -900,6 +974,15 @@
   mac: brew install --cask signal
   linux: (flatpak install signal — or .deb from signal.org)
   windows: winget install Signal.Signal
+
+- name: vlc
+  desc: Universal media player — plays every video/audio format, unlike QuickTime
+  cat: gui
+  sub: productivity
+  link: https://www.videolan.org/vlc/
+  mac: brew install --cask vlc
+  linux: apt install vlc
+  windows: winget install VideoLAN.VLC
 
 - name: bitwarden
   desc: Open-source password manager

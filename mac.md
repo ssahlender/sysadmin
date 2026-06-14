@@ -22,13 +22,25 @@ xcode-select --install
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
+**Brewfile — reproducible setup:** After installing all your tools, save them to a Brewfile. On the next Mac, restore everything with one command:
+
+```bash
+# Save current state (run after you've installed everything)
+brew bundle dump --file=~/Brewfile
+
+# Restore on a new Mac
+brew bundle --file=~/Brewfile
+```
+
+Keep your Brewfile in a private git repo or alongside your dotfiles.
+
 ---
 
 ## 2. Terminal + Editor + Font
 
 ```bash
 brew install --cask visual-studio-code iterm2 ghostty
-brew install --cask font-jetbrains-mono-nerd-font
+brew install --cask sublime-text font-jetbrains-mono-nerd-font
 ```
 
 **Font config:**
@@ -45,6 +57,7 @@ Ghostty → `~/.config/ghostty/config`: `font-family = JetBrainsMono Nerd Font M
 
 ```bash
 brew install git gh wget curl jq yq tree htop btop tmux fzf ripgrep fd bat eza zoxide fastfetch
+brew install ffmpeg imagemagick sevenzip
 ```
 
 **Git + SSH config:**
@@ -205,6 +218,7 @@ brew install --cask orbstack bruno dbeaver-community proxyman lens xpipe-io/tap/
 
 ```bash
 brew install --cask raycast rectangle thaw pearcleaner dockdoor knockknock
+brew install --cask alttab stats keka alfred
 ```
 
 | App | Purpose |
@@ -215,11 +229,18 @@ brew install --cask raycast rectangle thaw pearcleaner dockdoor knockknock
 | pearcleaner | App uninstaller (replaces AppCleaner) |
 | dockdoor | Dock window previews |
 | knockknock | Background process scanner |
+| alttab | Windows-style window switcher with thumbnails |
+| stats | Menu bar system monitor — CPU, GPU, RAM, disk, network |
+| keka | Archive extractor for .rar, .7z, .tar (alt: The Unarchiver) |
+| alfred | Classic launcher — alt: Raycast (Raycast is the modern pick) |
 
 **App Store / direct:** SnippetsLab (snippets), Latest (update checker), Stim (keep-awake).
 
 > Thaw over Hidden Bar: Hidden Bar stalled in 2022, buggy on Tahoe. Thaw is actively maintained.  
-> Pearcleaner over AppCleaner: sorts by size, Homebrew panel, open source.
+> Pearcleaner over AppCleaner: sorts by size, Homebrew panel, open source.  
+> AltTab replaces macOS Cmd+Tab with proper window previews — open source, free.  
+> Stats replaces paid iStat Menus — 38k GitHub stars, 9 monitoring modules.  
+> Alfred is the classic launcher; Raycast is the modern alternative with built-in AI + plugins.
 
 ---
 
@@ -227,7 +248,7 @@ brew install --cask raycast rectangle thaw pearcleaner dockdoor knockknock
 
 ```bash
 brew install --cask microsoft-office libreoffice obsidian notion slack zoom \
-  whatsapp signal bitwarden resilio-sync adobe-acrobat-reader pdf-expert
+  whatsapp signal bitwarden resilio-sync adobe-acrobat-reader pdf-expert vlc
 brew install wireguard-tools
 ```
 
@@ -269,15 +290,71 @@ brew install --cask vmware-fusion   # free personal tier
 
 ---
 
-## 16. Mac → Linux Alternatives
+## 16. macOS System Tweaks
+
+These settings fix long-standing macOS annoyances. Apply them once, enjoy forever.
+
+### Finder
+
+Open Finder → Settings (Cmd+,):
+
+- General → New Finder windows show → **Home folder** (more useful than "Recents")
+- Advanced → Show all filename extensions → **ON**
+- Advanced → Show warning before changing an extension → **OFF**
+- Advanced → When performing a search → **Search the Current Folder**
+
+In Finder's View menu, enable:
+
+- Show Status Bar
+- Show Path Bar
+- Show Tab Bar
+
+### Dock
+
+System Settings → Desktop & Dock:
+
+- Size → as small as practical
+- Position on screen → **Right** (vertical space > horizontal on widescreen)
+- Automatically hide and show the Dock → **ON**
+
+### Trackpad
+
+System Settings → Trackpad → Point & Click:
+
+- Tap to click → **ON**
+- Tracking speed → faster than default
+
+System Settings → Trackpad → More Gestures:
+
+- App Exposé → **ON** (three-finger swipe down)
+- Mission Control → **ON** (three-finger swipe up)
+
+### Keyboard
+
+System Settings → Keyboard:
+
+- Key repeat rate → **Fast**
+- Delay until repeat → **Short**
+
+### Spotlight (optional, skip if using Raycast/Alfred)
+
+System Settings → Spotlight → Search Results → uncheck Siri Suggestions and Bing Web Results.
+
+---
+
+## 17. Mac → Linux Alternatives
 
 | Mac tool | Linux equivalent |
 |----------|-----------------|
 | iTerm2 | Ghostty or Alacritty |
 | Raycast | Ulauncher or Albert |
+| Alfred | Ulauncher or Albert |
 | Rectangle | i3 / Sway tiling |
+| AltTab | built-in (Alt+Tab is native) |
 | OrbStack | Native Docker |
 | Proxyman | mitmproxy |
 | PDF Expert | Okular |
+| Keka | File Roller or 7-Zip |
+| Stats | btop or conky |
 | KnockKnock | rkhunter |
 | Parallels/UTM | KVM/QEMU |

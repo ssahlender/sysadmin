@@ -17,6 +17,7 @@ Windows Terminal is preinstalled on Windows 11.
 
 ```powershell
 winget install Microsoft.VisualStudioCode
+winget install SublimeHQ.SublimeText.4
 winget install DEVCOM.JetBrainsMonoNerdFont
 ```
 
@@ -32,6 +33,7 @@ winget install DEVCOM.JetBrainsMonoNerdFont
 winget install Git.Git GitHub.cli GNU.Wget curl.curl jqlang.jq MikeFarah.yq tree
 winget install junegunn.fzf BurntSushi.ripgrep.MSVC sharkdp.fd sharkdp.bat
 winget install eza-community.eza ajeetdsouza.zoxide fastfetch
+winget install Gyan.FFmpeg ImageMagick.ImageMagick 7zip.7zip
 ```
 
 **Git config:**
@@ -153,6 +155,7 @@ winget install TheDocumentFoundation.LibreOffice Obsidian.Obsidian Notion.Notion
 winget install SlackTechnologies.Slack Zoom.Zoom WhatsApp.WhatsApp Signal.Signal
 winget install Bitwarden.Bitwarden AgileBits.1Password Resilio.ResilioSync WireGuard.WireGuard
 winget install Adobe.Acrobat.Reader.64-bit
+winget install VideoLAN.VLC
 ```
 
 > Microsoft Office — preinstalled or Microsoft 365.
@@ -190,3 +193,7 @@ winget install doublecmd.doublecmd muCommander.muCommander
 | AppCleaner / Pearcleaner | Revo Uninstaller |
 | KnockKnock | Autoruns (Sysinternals) |
 | Parallels / UTM | Hyper-V |
+| Keka | 7-Zip (built into Windows) |
+| Stats | Task Manager or btop |
+| AltTab | built-in (Alt+Tab is native) |
+| Alfred / Raycast | PowerToys Run |
