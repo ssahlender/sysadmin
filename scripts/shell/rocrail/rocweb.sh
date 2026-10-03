@@ -106,7 +106,7 @@ opt_from_record() { # $1 = key, read from the install record in the derived pref
   [ -n "$PREFIX" ] || return 0
   [ -f "${PREFIX}/install-options.conf" ] || return 0
   awk -F= -v k="$1" '$1 == k { print substr($0, index($0, "=") + 1); exit }' \
-      "${PREFIX}/install-options.conf" 2>/dev/null || true
+      "${PREFIX}/install-options.conf" 2>/dev/null | tr -d '\r' || true
 }
 
 if [ "$WS_SET" -eq 0 ]; then

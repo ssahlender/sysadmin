@@ -185,8 +185,9 @@ WORKSPACE_PATH="${WORKSPACE_DIR}/${WORKSPACE_NAME}"
 
 opt_from_record() { # $1 = key
   [ -f "${PREFIX}/install-options.conf" ] || return 0
+  # tr -d CR: an older sidecar recorded a header value with the CRLF's carriage return still on it
   awk -F= -v k="$1" '$1 == k { print substr($0, index($0, "=") + 1); exit }' \
-      "${PREFIX}/install-options.conf" 2>/dev/null || true
+      "${PREFIX}/install-options.conf" 2>/dev/null | tr -d '\r' || true
 }
 
 adopt() { # $1=key  $2=current value  $3=1 if explicitly set on this run
@@ -374,7 +375,7 @@ remote_last_modified() {
   if [ -z "$lm" ]; then
     lm="$(curl -fsSIL --proto-redir =https --max-time 20 "$DOWNLOAD_URL" 2>/dev/null \
           | awk 'tolower($1)=="last-modified:"{ if (lm=="") lm=substr($0, index($0," ")+1) } \
-                 END { if (lm != "") print lm }')" || true
+                 END { if (lm != "") { sub(/\r$/, "", lm); print lm } }')" || true
   fi
   printf '%s' "$lm"
 }
@@ -681,7 +682,7 @@ curl -fL --proto-redir =https --retry 3 --retry-delay 2 -D "$TMP_HDR" -o "$TMP_Z
 
 # Last match, not first: with -L the file holds every hop's headers, and only the final response
 # describes the content that was actually written.
-ARCHIVE_LM="$(awk 'tolower($1) == "last-modified:" { lm=substr($0, index($0, " ")+1) } END { if (lm != "") print lm }' "$TMP_HDR" 2>/dev/null || true)"
+ARCHIVE_LM="$(awk 'tolower($1) == "last-modified:" { lm=substr($0, index($0, " ")+1); sub(/\r$/, "", lm) } END { if (lm != "") print lm }' "$TMP_HDR" 2>/dev/null || true)"
 
 # Integrity is TLS plus the zip CRC: the vendor publishes no checksum or signature to compare
 # against (verified - .sha256, .md5 and sha256sum.txt on the snapshot host are all 404).

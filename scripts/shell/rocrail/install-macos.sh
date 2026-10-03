@@ -104,7 +104,7 @@ advertised_revision() {
 
 remote_last_modified() {
   curl -fsSIL --proto-redir =https --max-time 20 "$DOWNLOAD_URL" 2>/dev/null \
-    | awk 'tolower($1)=="last-modified:" { if (lm=="") lm=substr($0, index($0," ")+1) } END { if (lm!="") print lm }' || true
+    | awk 'tolower($1)=="last-modified:" { if (lm=="") lm=substr($0, index($0," ")+1) } END { if (lm!="") { sub(/\r$/, "", lm); print lm } }' || true
 }
 
 installed_version() {
