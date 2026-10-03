@@ -3,17 +3,19 @@
 This file records the evidence behind the scripts in this directory, so the claims in the READMEs
 can be checked rather than trusted. It deliberately contains no site-specific information.
 
-Verified against the builds published on **2026-10-03**. Revisions here are per-platform and
-change with every snapshot, so none is pinned: read the one you care about from the archive's own
-`revision.info`. As checked on that date, `debian11-i64`, `debian13-ARM64` and `Windows-WIN64`
-all reported **7454** while `Windows-WIN32` reported **7400** - which is exactly why a single
-pinned number is misleading. The macOS `.app.zip` carries **no `revision.info` at all**, so a
-macOS revision cannot be read from the artifact (only the history feed names one).
+Verified against the builds published on **2026-10-03**. Revisions are per-platform and change
+with every snapshot, so none is pinned. Each platform is identified from its own artifact: the
+archive's `revision.info` on Linux and Windows, the bundle's `Info.plist`
+(`CFBundleShortVersionString`) on macOS. As checked on that date, `debian11-i64`,
+`debian13-ARM64` and `Windows-WIN64` all reported **7454**, `Windows-WIN32` reported **7400**,
+and the macOS build reported **26.10.3-7458**. The spread inside a single platform is why a
+pinned number is misleading.
 
 ## Measured, on a real install
 
 | Claim | How it was checked | Result |
 |-------|--------------------|--------|
+| Where each platform's revision comes from | `revision.info` in the Linux/Windows archives; `Info.plist` in the macOS bundle | Linux/Windows: `Revision: <n> (<arch>, <os>)`; macOS: `26.10.3-<n>` -> `7458`. No platform needs the feed's history files to identify its build |
 | No Java anywhere | `file` + `ldd` on the Linux binary; archive listings for Windows and macOS | Native ELF / PE / Mach-O, no `.jar` in any artifact |
 | Linux binary dependencies | `ldd` | `libm`, `libc` only — plus ~70 native `.so` driver modules |
 | Server runs headless | Started `rocrail -w <ws> -l <bin> -p <port>` | Runs; creates the workspace on first start |
@@ -33,10 +35,12 @@ macOS revision cannot be read from the artifact (only the history feed names one
 
 ## Claimed corrections — the operator was right, the earlier draft was wrong
 
-- **"I don't want hardcoded revisions."** Correct, and the earlier draft was worse than merely
-  stale: it credited revision **7458** to the macOS build, but that archive contains no
-  `revision.info`, so the number was inferred from history file names and never read from the
-  artifact. Pinned numbers are gone from the scripts; the per-platform facts are stated once, above.
+- **"I don't want hardcoded revisions."** Correct. Revisions had been pinned in comments as
+  though verified, and the macOS one had in fact been inferred from the feed's history file names
+  rather than read from the artifact - the macOS archive has no `revision.info`. The number
+  happens to be right (**7458**, now read properly from the bundle's `Info.plist`), but nothing
+  is pinned any more, and the platform that supposedly could not report a revision now reports
+  and compares one like the other two.
 
 - **"The update never contains the layout."** Correct. The first draft of this work asserted that
   an in-place update would overwrite a live configuration, reasoning from the vendor archive

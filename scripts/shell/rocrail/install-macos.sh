@@ -13,10 +13,11 @@
 # first launch work; if macOS still objects, the vendor's documented fallback is a one-time
 # right-click -> Open.
 #
-# Verified against the macOS build published on 2026-10-03. Note: the macOS .app.zip carries
-# NO revision.info inside it (verified), so unlike the Linux and Windows installers this script
-# can neither report nor compare a revision - the number exists only in the feed's history
-# filenames. See REVIEW.md.
+# Verified against the macOS build published on 2026-10-03. The macOS .app.zip carries no
+# revision.info (verified) - the same build is identified by its own artifact instead, the
+# bundle's Info.plist: CFBundleShortVersionString "26.10.3-<n>". Every platform therefore reads
+# its revision from what it shipped: revision.info on Linux and Windows, Info.plist here.
+# See REVIEW.md.
 
 set -euo pipefail
 
@@ -117,25 +118,61 @@ installed_version() {
   fi
 }
 
+installed_revision() {
+  # macOS ships no revision.info. The bundle's Info.plist identifies the same build instead:
+  # CFBundleShortVersionString "26.10.3-<n>" -> revision "<n>" (verified against the published
+  # macOS27 build).
+  local v
+  v="$(installed_version || true)"
+  [ -n "$v" ] || return 0
+  case "$v" in
+    *-[0-9]*) printf '%s' "${v##*-}" ;;
+    *)        printf '%s' "$v" ;;
+  esac
+}
+
+record_field() { # $1 = key in this install's record
+  local rec="${STATE_DIR}/install-record.json"
+  [ -f "$rec" ] || return 0
+  sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$rec" | head -1
+}
+
 app_is_running() {
   pgrep -x rocview >/dev/null 2>&1 || pgrep -f "${APP_PATH}/Contents/MacOS" >/dev/null 2>&1
 }
 
 # --------------------------------------------------------------------- check
 if [ "$MODE" = "check" ]; then
+  inst_rev="$(installed_revision || true)"
+  rec_lm="$(record_field archive_last_modified)"
+  live_lm="$(remote_last_modified || true)"
+  adv="$(advertised_revision || true)"
+
   log "platform        : macOS ${ARCH}   build: ${FILENAME}"
   log "app             : ${APP_PATH}"
   log "url             : ${DOWNLOAD_URL}"
-  log "installed       : $(installed_version || true)"
-  log "available (log) : $(advertised_revision || true)"
-  log "available (file): $(remote_last_modified || true)"
-  if [ -n "$(installed_version || true)" ]; then
-    log "note            : macos builds carry no revision.info; the version is read from Info.plist"
-    log "verdict         : installed - compare the two 'available' lines above"
+  log "installed       : ${inst_rev:-<not installed>}"
+  log "installed from  : ${rec_lm:-<not recorded>}   (this archive's Last-Modified at install time)"
+  log "available (file): ${live_lm:-<unavailable>}   (this archive, now)"
+  log "newest overall  : ${adv:-<unavailable>}   (any platform, informational)"
+  if [ -f "${STATE_DIR}/install-record.json" ]; then
+    log "last installed  : $(tr -d '\n' < "${STATE_DIR}/install-record.json")"
+  fi
+
+  if [ -z "$inst_rev" ]; then
+    log "verdict         : NOT INSTALLED"
+    exit 2
+  fi
+  if [ -z "$live_lm" ]; then
+    log "verdict         : UNKNOWN - could not reach the archive, nothing was compared"
+    exit 3
+  fi
+  if [ -n "$rec_lm" ] && [ "$rec_lm" = "$live_lm" ]; then
+    log "verdict         : up to date (this archive is unchanged)"
     exit 0
   fi
-  log "verdict         : NOT INSTALLED"
-  exit 2
+  log "verdict         : UPDATE AVAILABLE (this archive changed since install)"
+  exit 1
 fi
 
 # --------------------------------------------------------------------- uninstall
@@ -248,13 +285,19 @@ if command -v spctl >/dev/null 2>&1; then
 fi
 
 # --------------------------------------------------------------------- record
+# Same keys as the Linux and Windows records, so all three read alike: the revision from this
+# platform's own artifact, plus the archive's Last-Modified at install time, which --check
+# compares against.
 VERSION="$(installed_version || true)"
+REVISION="$(installed_revision || true)"
+ARCHIVE_LM="$(remote_last_modified || true)"
 cat > "${STATE_DIR}/install-record.json" <<EOF
-{"version":"${VERSION:-unknown}","file":"${FILENAME}","url":"${DOWNLOAD_URL}","sha256":"$(shasum -a 256 "$TMP_ZIP" | awk '{print $1}')","installed":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installed_by":"install-macos.sh"}
+{"revision":"${REVISION:-unknown}","version":"${VERSION:-unknown}","file":"${FILENAME}","url":"${DOWNLOAD_URL}","sha256":"$(shasum -a 256 "$TMP_ZIP" | awk '{print $1}')","archive_last_modified":"${ARCHIVE_LM}","installed":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installed_by":"install-macos.sh"}
 EOF
 
 log ""
 log "Rocrail client installed."
+log "  revision  : ${REVISION:-unknown}"
 log "  version   : ${VERSION:-unknown}"
 log "  app       : ${APP_PATH}"
 log "  cached zip: ${TMP_ZIP}"
