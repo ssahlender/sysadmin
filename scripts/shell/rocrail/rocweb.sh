@@ -160,7 +160,11 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 [ -f "$INI" ] || die "no workspace ini at $INI - start the server once so Rocrail creates it"
+[ -L "$INI" ] && die "$INI is a symlink; refusing to write through it"
 [ -w "$INI" ] || die "$INI is not writable"
+# Check everything that can fail BEFORE stopping the service, so a missing tool cannot leave
+# the server down.
+command -v python3 >/dev/null 2>&1 || die "python3 is required to edit the ini safely"
 
 # One editor at a time: a concurrent run could rewrite the ini under this one.
 LOCK="${WORKSPACE}/.rocweb.lock"
@@ -187,16 +191,28 @@ if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
   fi
 fi
 
+# From here on the service is down. Whatever happens next - a python failure, a full disk, a
+# signal - the server must come back up.
+if [ "$WAS_ACTIVE" -eq 1 ]; then
+  trap 'systemctl start "$UNIT_NAME" >/dev/null 2>&1 || true' EXIT
+fi
+
 BACKUP="${INI}.rocweb-$(date -u +%Y%m%dT%H%M%S)-$$"
+if [ -e "$BACKUP" ]; then
+  die "backup path already exists: $BACKUP"
+fi
 cp -p "$INI" "$BACKUP"
 log "Previous ini kept as ${BACKUP}"
 
 # ---------------------------------------------------------------- edit (XML-aware, atomic)
-python3 - "$INI" "$TARGET_PORT" "$WEBPATH" <<'PY'
+python3 - "$INI" "$TARGET_PORT" "$WEBPATH" "$SERVER_MONITOR_PORT" <<'PY'
 import os, re, sys
 import xml.etree.ElementTree as ET
 
-path, port, webpath = sys.argv[1], sys.argv[2], sys.argv[3]
+path, port, webpath, monitor = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+if os.path.islink(path):
+    sys.exit(f"refusing to edit a symlink: {path}")
 
 def esc(v):
     # attribute-value escaping: the value goes into the document as XML
@@ -223,8 +239,10 @@ ATTRS = ('imgpath="images" svgpath1="svg/themes/SpDrS60" svgpath2="svg/themes/Ac
          'svgpath3="svg/themes/Roads" svgpath4="." svgpath5="." svgpath6="." svguserprops=""')
 
 def set_attr(el, name, value):
+    # A lambda replacement, not a template string: a backslash or \g<...> in the value would
+    # otherwise be interpreted by re.sub's template expansion.
     if re.search(rf'\b{name}="[^"]*"', el):
-        return re.sub(rf'\b{name}="[^"]*"', f'{name}="{esc(value)}"', el, count=1)
+        return re.sub(rf'\b{name}="[^"]*"', lambda _m: f'{name}="{esc(value)}"', el, count=1)
     return el.replace("<webclient", f'<webclient {name}="{esc(value)}"', 1)
 
 note = ""
@@ -248,7 +266,7 @@ else:
     else:
         if "</rocrail>" not in s:
             sys.exit("no </rocrail> closing tag found; the file is malformed, not editing it")
-        block = f'  <http port="8008" shortids="false">\n    {webel}\n  </http>\n'
+        block = f'  <http port="{esc(monitor)}" shortids="false">\n    {webel}\n  </http>\n'
         s = s.replace("</rocrail>", block + "</rocrail>", 1)
         note = "inserted an <http>/<webclient> block"
 

@@ -46,6 +46,7 @@ VARIANT="auto"          # auto | debian11 | ubuntu24   (x86_64 only)
 UNIT_PATH="/etc/systemd/system/rocrail.service"
 CONSOLE_MODE=0
 DRY_RUN=0
+FORCE=0
 MODE="install"          # install | check | rollback
 
 # Which options were given explicitly. Options NOT given are adopted from an existing install
@@ -74,6 +75,8 @@ Usage: install-linux.sh [options]
   --check                report installed vs available and exit (no changes)
   --rollback             restore <prefix>.prev
   --dry-run              show what would be done, change nothing
+  --force                act even if nothing changed, or if --prefix does not look like
+                         a Rocrail install
   -h, --help             this help
 
 On re-run, options you do NOT pass are adopted from the existing install, so a plain re-run
@@ -107,6 +110,7 @@ while [ $# -gt 0 ]; do
     --check)          MODE="check";            shift ;;
     --rollback)       MODE="rollback";         shift ;;
     --dry-run)        DRY_RUN=1;               shift ;;
+    --force)          FORCE=1;                 shift ;;
     -h|--help)        usage; exit 0 ;;
     *) die "unknown option: $1 (try --help)" ;;
   esac
@@ -148,6 +152,20 @@ case "$SERVICE_USER$SERVICE_GROUP" in
 esac
 # Each path is checked separately. Concatenating them into one case pattern would pass as
 # soon as the FIRST component was absolute, hiding a relative prefix.
+# systemd expands "%" specifiers and "$" variables in unit files, so neither may appear in
+# anything that ends up in the generated unit.
+case "$WORKSPACE_NAME$WORKSPACE_DIR${PREFIX}${UNIT_PATH}" in
+  *%*) die "paths and names must not contain '%' (systemd expands it in unit files)" ;;
+  *'$'*) die "paths and names must not contain '\$' (systemd expands it in unit files)" ;;
+esac
+
+# A prefix is about to be moved aside and later replaced. Refuse the obvious disasters.
+for bad in / /usr /usr/local /opt /etc /var /var/lib /home /root /srv; do
+  if [ "$PREFIX" = "$bad" ]; then
+    [ "$FORCE" -eq 1 ] || die "refusing to use '$PREFIX' as the install prefix (use --force to override)"
+  fi
+done
+
 case "$WORKSPACE_DIR" in /*) ;; *) die "workspace directory must be an absolute path: '$WORKSPACE_DIR'" ;; esac
 case "$PREFIX"        in /*) ;; *) die "prefix must be an absolute path: '$PREFIX'" ;; esac
 case "$UNIT_PATH"     in /*) ;; *) die "unit path must be an absolute path: '$UNIT_PATH'" ;; esac
@@ -219,17 +237,17 @@ DOWNLOAD_URL="${SNAPSHOT_BASE}/Debian/${FILENAME}"
 advertised_revision() {
   # Newest revision in the snapshot list - newest for ANY platform. Informational only:
   # platforms are published at different times, so this is not this platform's version.
-  curl -fsSL --max-time 20 "$REVISION_URL" 2>/dev/null \
+  curl -fsSL --proto-redir =https --max-time 20 "$REVISION_URL" 2>/dev/null \
     | awk 'NR==1 { first=$1 } END { if (first != "") print first }' || true
 }
 
 remote_last_modified() {
   # HTTP Last-Modified of THIS platform's archive: the precise "available" signal.
   local lm
-  lm="$(curl -fsSIL --max-time 20 -o /dev/null -w '%{header_json}' "$DOWNLOAD_URL" 2>/dev/null \
+  lm="$(curl -fsSIL --proto-redir =https --max-time 20 -o /dev/null -w '%{header_json}' "$DOWNLOAD_URL" 2>/dev/null \
         | tr -d '\n' | sed -n 's/.*"last-modified":\["\([^"]*\)".*/\1/p')" || true
   if [ -z "$lm" ]; then
-    lm="$(curl -fsSIL --max-time 20 "$DOWNLOAD_URL" 2>/dev/null \
+    lm="$(curl -fsSIL --proto-redir =https --max-time 20 "$DOWNLOAD_URL" 2>/dev/null \
           | awk 'tolower($1)=="last-modified:"{ if (lm=="") lm=substr($0, index($0," ")+1) } \
                  END { if (lm != "") print lm }')" || true
   fi
@@ -296,6 +314,10 @@ fi
 # --------------------------------------------------------------------- rollback mode
 if [ "$MODE" = "rollback" ]; then
   [ -d "${PREFIX}.prev" ] || die "no previous build at ${PREFIX}.prev"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "DRY RUN - would restore ${PREFIX}.prev over ${PREFIX} and restart the service."
+    exit 0
+  fi
   [ "$(id -u)" -eq 0 ] || exec sudo "$0" "${ORIG_ARGS[@]}"
   log "Rolling back ${PREFIX} <- ${PREFIX}.prev"
   systemctl stop "$(basename "${UNIT_PATH%.service}")" 2>/dev/null || true
@@ -367,12 +389,33 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
+# --------------------------------------------------------------------- nothing to do?
+# Idempotent no-op. If this platform's archive is unchanged AND the unit on disk already
+# matches what would be rendered, there is nothing to install - and rotating <prefix>.prev a
+# second time would make --rollback restore the build that is already running. Runs before the
+# root check on purpose: a plain re-run on an up-to-date host does not even prompt for sudo.
+if [ "$FORCE" -eq 0 ] && [ -n "$(installed_revision)" ] && [ -f "$UNIT_PATH" ]; then
+  rec_lm="$(opt_from_record ARCHIVE_LAST_MODIFIED)"
+  cur_lm="$(remote_last_modified)"
+  if [ -n "$rec_lm" ] && [ -n "$cur_lm" ] && [ "$rec_lm" = "$cur_lm" ] \
+     && diff -q <(render_unit) "$UNIT_PATH" >/dev/null 2>&1; then
+    log "Already up to date: revision $(installed_revision), this platform's archive is unchanged"
+    log "and ${UNIT_PATH} already matches the requested configuration."
+    log "Nothing to do. Use --force to reinstall anyway."
+    exit 0
+  fi
+fi
+
 # --------------------------------------------------------------------- root required
 if [ "$(id -u)" -ne 0 ]; then
   log "Root is required to write ${PREFIX} and ${UNIT_PATH}; re-running with sudo."
   # ORIG_ARGS, not "$@": the parse loop above has already consumed "$@".
   exec sudo "$0" "${ORIG_ARGS[@]}"
 fi
+
+# File and directory modes must not depend on root's umask: with umask 027/077 the prefix
+# would end up mode 750/700 and the service user could not traverse it (systemd reports 203/EXEC).
+umask 022
 
 # --------------------------------------------------------------------- prerequisites
 for tool in curl unzip systemctl; do
@@ -391,7 +434,18 @@ if [ -d "$PREFIX_PARENT" ]; then
 fi
 
 # A symlinked prefix would be destroyed by the swap, leaving the link pointing nowhere.
-[ -L "$PREFIX" ] && die "${PREFIX} is a symlink; the atomic swap needs a real directory"
+if [ -L "$PREFIX" ]; then
+  die "${PREFIX} is a symlink; the atomic swap needs a real directory"
+fi
+
+# The swap moves the whole existing prefix aside and later replaces it. Refuse to do that to
+# a directory that is not a Rocrail install unless the operator insists.
+if [ -d "$PREFIX" ] && [ "$FORCE" -eq 0 ]; then
+  if [ ! -f "${PREFIX}/revision.info" ] && [ ! -f "${PREFIX}/install-record.json" ]; then
+    die "${PREFIX} does not look like a Rocrail install (no revision.info, no install-record.json).
+Refusing to move it aside. Check --prefix, or pass --force if that is really intended."
+  fi
+fi
 
 # --------------------------------------------------------------------- exclusive lock
 # Two concurrent runs would otherwise share the staging and backup directories and could
@@ -425,7 +479,8 @@ cleanup() { rm -f "$TMP_ZIP"; rm -rf "$STAGE"; }
 trap cleanup EXIT
 
 log "Downloading ${FILENAME}"
-curl -fL --retry 3 --retry-delay 2 -o "$TMP_ZIP" "$DOWNLOAD_URL" \
+# --proto-redir: the snapshot host redirects to a different host name; keep that hop on https.
+curl -fL --proto-redir =https --retry 3 --retry-delay 2 -o "$TMP_ZIP" "$DOWNLOAD_URL" \
   || die "download failed: $DOWNLOAD_URL"
 
 # Integrity is TLS plus the zip CRC: the vendor publishes no checksum or signature to compare
@@ -462,18 +517,21 @@ unzip -q -o "$TMP_ZIP" -d "$STAGE" || die "extraction failed; the running instal
 # warned about and then destroyed by the next run's cleanup of <prefix>.prev.
 CARRIED=""
 if [ -d "$PREFIX" ]; then
-  for f in $(ls -A "$PREFIX" 2>/dev/null || true); do
+  # find -printf, not $(ls): a filename may contain spaces or newlines.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
     case "$f" in
       *.prev|*.new.*|*.lock|*.rolledback|*.failed) continue ;;
       install-options.conf|install-record.json) continue ;;
+      Rocrail-*.zip) continue ;;            # the vendor archive is re-copied below anyway
     esac
-    [ -e "${STAGE}/${f}" ] && continue
+    if [ -e "${STAGE}/${f}" ]; then continue; fi
     if cp -a "${PREFIX}/${f}" "${STAGE}/${f}"; then
       CARRIED="${CARRIED} ${f}"
     else
       warn "could not carry over ${f}"
     fi
-  done
+  done < <(find "$PREFIX" -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null || true)
 fi
 if [ -n "$CARRIED" ]; then
   log "Carried over into the new build:${CARRIED}"
@@ -498,8 +556,9 @@ cp -f "$TMP_ZIP" "${PREFIX}/${FILENAME}"
 # Record what was installed, and with which options: "installed" is then never inferred from
 # a timestamp, and a re-run reproduces the same configuration.
 ARCHIVE_LM="$(remote_last_modified)"
+ZIP_SHA="$(sha256sum "$TMP_ZIP" | awk '{print $1}')"
 cat > "${PREFIX}/install-record.json" <<EOF
-{"revision":"${ZIP_REV:-unknown}","build":"${ZIP_BUILD:-unknown}","file":"${FILENAME}","url":"${DOWNLOAD_URL}","sha256":"$(sha256sum "$TMP_ZIP" | awk '{print $1}')","archive_last_modified":"${ARCHIVE_LM}","installed":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installed_by":"install-linux.sh"}
+{"revision":"${ZIP_REV:-unknown}","build":"${ZIP_BUILD:-unknown}","file":"${FILENAME}","url":"${DOWNLOAD_URL}","sha256":"${ZIP_SHA}","archive_last_modified":"${ARCHIVE_LM}","installed":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installed_by":"install-linux.sh"}
 EOF
 
 cat > "${PREFIX}/install-options.conf" <<EOF
@@ -512,6 +571,7 @@ VARIANT=${VARIANT}
 CONSOLE_MODE=${CONSOLE_MODE}
 UNIT_PATH=${UNIT_PATH}
 ARCHIVE_LAST_MODIFIED=${ARCHIVE_LM}
+SHA256=${ZIP_SHA}
 EOF
 chmod 644 "${PREFIX}/install-options.conf" "${PREFIX}/install-record.json"
 
@@ -534,11 +594,13 @@ if ! systemctl enable "$UNIT_NAME" >/dev/null 2>&1; then
   warn "could not enable ${UNIT_NAME} at boot; it will still be started now"
 fi
 
-# --------------------------------------------------------------------- start, with rollback
-if ! systemctl restart "$UNIT_NAME"; then
-  warn "the new build did not start; rolling back to the previous one."
+# --------------------------------------------------------------------- start + health check
+roll_back_failed_update() {
+  warn "rolling back to the previous build."
   rm -rf "${PREFIX}.failed"
-  mv "$PREFIX" "${PREFIX}.failed"
+  if [ -d "$PREFIX" ]; then
+    mv "$PREFIX" "${PREFIX}.failed"
+  fi
   if [ -d "${PREFIX}.prev" ]; then
     mv "${PREFIX}.prev" "$PREFIX"
     log "Previous build restored to ${PREFIX}"
@@ -547,8 +609,34 @@ if ! systemctl restart "$UNIT_NAME"; then
     cp -p "${UNIT_PATH}.previous" "$UNIT_PATH"
     systemctl daemon-reload
   fi
-  systemctl restart "$UNIT_NAME" || warn "the previous build also failed to start"
+  systemctl restart "$UNIT_NAME" 2>/dev/null || warn "the previous build also failed to start"
+}
+
+# A zero exit from restart only means the process was forked: Type=simple reports success even
+# if the binary dies immediately. Require it to still be running before declaring success.
+service_healthy() {
+  local _
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
+      sleep 2
+      if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+if ! systemctl restart "$UNIT_NAME"; then
+  roll_back_failed_update
   die "update failed and was rolled back; the failed build is kept at ${PREFIX}.failed"
+fi
+if ! service_healthy; then
+  warn "the new build did not stay running. Recent log:"
+  journalctl -u "$UNIT_NAME" -n 6 --no-pager 2>/dev/null | sed 's/^/    /' || true
+  roll_back_failed_update
+  die "the new build did not stay running; rolled back. The failed build is kept at ${PREFIX}.failed"
 fi
 
 # --------------------------------------------------------------------- report

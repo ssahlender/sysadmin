@@ -52,7 +52,8 @@ param(
     [switch] $Check,
     [switch] $Uninstall,
     [switch] $NoShortcut,
-    [switch] $DryRun
+    [switch] $DryRun,
+    [switch] $Force
 )
 
 Set-StrictMode -Version Latest
@@ -158,6 +159,15 @@ if ($Check) {
 # ---------------------------------------------------------------- uninstall
 if ($Uninstall) {
     if (-not (Test-Path -LiteralPath $InstallDir)) { throw "not installed: $InstallDir" }
+    $looksLikeRocrail = (Test-Path -LiteralPath (Join-Path $InstallDir 'revision.info')) -or
+                        (Test-Path -LiteralPath (Join-Path $InstallDir 'install-record.json'))
+    if (-not $looksLikeRocrail -and -not $Force) {
+        throw "$InstallDir does not look like a Rocrail install (no revision.info, no install-record.json); refusing to remove it. Pass -Force if that is really intended."
+    }
+    if ($DryRun) {
+        Write-Log "DRY RUN - would remove $InstallDir and the shortcut. Workspaces, rocrail.ini and lic.dat are never touched."
+        exit 0
+    }
 
     Get-Process -Name 'rocrail', 'rocview' -ErrorAction SilentlyContinue |
         Stop-Process -Force

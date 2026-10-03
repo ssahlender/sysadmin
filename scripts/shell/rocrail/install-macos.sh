@@ -138,6 +138,11 @@ fi
 # --------------------------------------------------------------------- uninstall
 if [ "$MODE" = "uninstall" ]; then
   [ -d "$APP_PATH" ] || die "not installed: $APP_PATH"
+  [ -f "${APP_PATH}/Contents/Info.plist" ] || die "${APP_PATH} is not a Rocrail app bundle; refusing to remove it"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "DRY RUN - would remove ${APP_PATH} (workspaces, plans and settings are never touched)."
+    exit 0
+  fi
   if app_is_running; then
     log "Quitting Rocview first."
     osascript -e "tell application id \"${BUNDLE_ID}\" to quit" >/dev/null 2>&1 || true
