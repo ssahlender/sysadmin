@@ -1,4 +1,15 @@
-#!/bin/bash -xv
+#!/bin/bash
+#
+# LEGACY - kept for history, superseded by the per-platform scripts in the parent directory.
+#
+# This script tried to cover Linux and macOS in one file. Two bugs in it are fixed here so it
+# still runs, but new work should use install-linux.sh / install-macos.sh:
+#   * the macOS archive name below was removed upstream and 404s
+#   * downloads had no failure check, so a 404 was written to disk and only failed at unzip
+# It also generates a server unit with no -w, which leaves the workspace inside the install
+# prefix - see ../README.md for why that is worth avoiding.
+#
+# Also dropped: the -xv in the shebang, which traced the whole run to stderr.
 
 BASE_URL="https://www.rocrail.online/rocrail-snapshot"
 
@@ -18,9 +29,16 @@ esac
 ARCH=$(uname -m)
 
 if [ "$OS" = macos ]; then
-    FILE="Rocrail-tahoe-M.app.zip"
     DIR="macOS"
     DEST_DIR="$HOME/data/rocrail"
+    case "$ARCH" in
+        arm64)  FILE="Rocrail-macOS27.app.zip" ;;
+        x86_64) FILE="Rocrail-sequoia-i64.app.zip" ;;
+        *)
+            echo "ERROR: unsupported architecture: $ARCH" >&2
+            exit 1
+            ;;
+    esac
 elif [ "$OS" = linux ]; then
     DEST_DIR="/opt/rocrail"
     DIR="Debian"
@@ -52,9 +70,9 @@ if [ -f "$FILE" ]; then
 fi
 
 if command -v wget >/dev/null 2>&1; then
-    wget "$URL"
+    wget -q --show-progress -O "$FILE" "$URL" || { echo "ERROR: download failed: $URL" >&2; exit 1; }
 else
-    curl -L -o "$FILE" "$URL"
+    curl -fL -o "$FILE" "$URL" || { echo "ERROR: download failed: $URL" >&2; exit 1; }
 fi
 
 if [ "$OS" = linux ]; then

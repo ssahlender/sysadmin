@@ -13,7 +13,8 @@ One file per platform — tools, install commands, config snippets.
 
 | Path | Purpose |
 |------|---------|
-| [scripts/rocrail/](scripts/rocrail/) | Rocrail model railroad — installer + docs |
+| [scripts/shell/rocrail/](scripts/shell/rocrail/) | Rocrail — Linux server installer, Rocweb helper, macOS client, docs |
+| [scripts/powershell/rocrail/](scripts/powershell/rocrail/) | Rocrail — Windows client installer |
 
 ## Adding a tool
 
