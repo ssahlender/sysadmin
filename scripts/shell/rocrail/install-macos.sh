@@ -49,7 +49,7 @@ Usage: install-macos.sh [options]
 Client use:
   Rocview attaches to a server - no local server is set up by this script.
     File -> "Verbinden mit..."           enter the server address and port 8051
-    ./Rocview.app/.../rocview -h HOST -p 8051   pre-pointed launch (verified on the Linux
+    ./Rocrail.app/Contents/MacOS/rocview -h HOST -p 8051   pre-pointed launch (verified on the Linux
                                                  build; the documented flags on macOS)
 EOF
 }

@@ -226,14 +226,17 @@ if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force }
 
 Write-Log "Downloading $Archive"
 $attempt = 0
-$job = $null
 while ($true) {
     $attempt++
     try {
-        $job = Start-BitsTransfer -Source $Url -Destination $tmpZip -TransferType Download -ErrorAction Stop
+        # Without -Asynchronous this transfers in the foreground, returns no job and needs no
+        # Complete-BitsTransfer, so there is no job to clean up when an attempt fails.
+        Start-BitsTransfer -Source $Url -Destination $tmpZip -TransferType Download -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $tmpZip)) {
+            throw 'the transfer reported success but produced no file'
+        }
         break
     } catch {
-        if ($job) { Remove-BitsTransfer -BitsJob $job -ErrorAction SilentlyContinue; $job = $null }
         if ($attempt -ge 3) { throw "download failed after $attempt attempts: $($_.Exception.Message)" }
         Write-Warn "download attempt $attempt failed; retrying in 5s"
         Start-Sleep -Seconds 5
@@ -312,7 +315,6 @@ catch {
     throw
 }
 finally {
-    if ($job -and $job.JobState -eq 'Transferred') { Complete-BitsTransfer -BitsJob $job }
     if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue }
 }
 
