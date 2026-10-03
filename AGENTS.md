@@ -40,15 +40,11 @@ incoming/          ← tools to evaluate, not yet added to lists
 - **Linux:** `brew install` for everything that has a formula. `apt` only where brew has no formula (libreoffice, firefox, pinentry-curses, doublecmd-gtk, wireguard-tools). GUI apps use AppImage/flatpak/deb.
 - **Windows:** `winget install` for everything. Tools only available in WSL noted as `(WSL only)`.
 
-## Rocrail scripts
+## Scripts policy
 
-`scripts/shell/rocrail/` — Linux **server** installer, the `rocweb.sh` browser-client helper,
-the macOS **client** installer, and `REVIEW.md` (what was measured vs assumed).
-`scripts/powershell/rocrail/` — Windows **client** installer.
-
-Role split: Linux runs the server, Windows and macOS are clients that attach to one. Every script
-is idempotent — re-running is the update path. `shell/rocrail/legacy/install-legacy.sh` is the
-original combined script, kept for history with its broken macOS URL fixed.
+**Tools only.** Host-specific installers/updaters — e.g. the Rocrail set (Linux server, macOS and
+Windows clients, `rocweb.sh`) — live in the private infrastructure repo and are deliberately not
+mirrored here. Don't re-add them.
 
 ## Git policy
 

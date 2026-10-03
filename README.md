@@ -11,10 +11,8 @@ One file per platform — tools, install commands, config snippets.
 
 ## Scripts
 
-| Path | Purpose |
-|------|---------|
-| [scripts/shell/rocrail/](scripts/shell/rocrail/) | Rocrail — Linux server installer, Rocweb helper, macOS client, docs |
-| [scripts/powershell/rocrail/](scripts/powershell/rocrail/) | Rocrail — Windows client installer |
+Tools only. Host-specific installers and updaters (Rocrail, machine-specific prep) live in the
+private infrastructure repo and are deliberately **not** mirrored here.
 
 ## Adding a tool
 
