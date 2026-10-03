@@ -92,6 +92,7 @@ unit_execstart() { awk -F'ExecStart=' '/^ExecStart=/{ print $2; exit }' "$UNIT_P
 unit_arg() { # $1 = option letter, e.g. -w ; handles "-w value", "-wvalue" and quoted values
   unit_execstart | tr ' ' '\n' | awk -v o="$1" '
     $0 == o { getline; gsub(/^["'\'']|["'\'']$/, ""); print; exit }
+    index($0, o "=") == 1 { v = substr($0, length(o) + 2); gsub(/^["'\'']|["'\'']$/, "", v); print v; exit }
     index($0, o) == 1 && length($0) > length(o) { v = substr($0, length(o) + 1); gsub(/^["'\'']|["'\'']$/, "", v); print v; exit }
   '
 }
@@ -120,6 +121,13 @@ if [ "$WS_SET" -eq 0 ]; then
   fi
 fi
 WORKSPACE="${WORKSPACE%/}"
+case "$WORKSPACE" in
+  /*) ;;
+  *) die "the resolved workspace is not an absolute path: '$WORKSPACE' (pass --workspace DIR)" ;;
+esac
+if [ ! -d "$WORKSPACE" ]; then
+  warn "the workspace directory does not exist yet: $WORKSPACE"
+fi
 
 if [ -z "$WEBPATH" ]; then
   [ -n "$PREFIX" ] || die "could not derive the prefix; pass --webpath DIR"
@@ -219,8 +227,11 @@ def esc(v):
     return (v.replace("&", "&amp;").replace("<", "&lt;")
              .replace(">", "&gt;").replace('"', "&quot;"))
 
-with open(path, encoding="utf-8", newline="") as fh:
-    s = fh.read()
+try:
+    with open(path, encoding="utf-8", newline="") as fh:
+        s = fh.read()
+except UnicodeDecodeError as exc:
+    sys.exit(f"{path} is not valid UTF-8 ({exc}); refusing to edit it")
 
 # Did the ORIGINAL parse? If Rocrail wrote something ElementTree cannot read, do not turn
 # that into a failure - only require that we do not make it worse.
@@ -308,6 +319,18 @@ HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
 
 if [ "$ACTION" = "disable" ]; then
   log "Rocweb disabled (port 0). Server-Monitor stays on ${SERVER_MONITOR_PORT}."
+  exit 0
+fi
+
+# The server was not running when we started, so there is nothing to start and nothing to
+# probe. Starting it here would override a deliberate stop. The edit is still correct.
+if [ "$WAS_ACTIVE" -eq 0 ]; then
+  log ""
+  log "Rocweb is enabled in ${INI}."
+  log "  ini     : $INI"
+  log "  backup  : $BACKUP"
+  log "  note    : ${UNIT_NAME} was not running, so it was left stopped. The setting applies"
+  log "            the next time it starts (systemctl start ${UNIT_NAME})."
   exit 0
 fi
 

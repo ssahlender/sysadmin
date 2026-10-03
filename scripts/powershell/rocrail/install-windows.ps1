@@ -108,9 +108,18 @@ function Get-RemoteInfo {
     param([string]$Url)
     try {
         $resp = Invoke-WebRequest -Uri $Url -Method Head -UseBasicParsing -TimeoutSec 20
+        $lm = $resp.Headers['Last-Modified']
+        if ($lm) {
+            return [pscustomobject]@{ LastModified = $lm; Length = $resp.Headers['Content-Length'] }
+        }
+    } catch { }
+    # In Windows PowerShell 5.1 a HEAD across a redirect does not always return the final
+    # asset's headers. Fall back to a one-byte ranged GET of the asset itself.
+    try {
+        $resp = Invoke-WebRequest -Uri $Url -Headers @{ Range = 'bytes=0-0' } -UseBasicParsing -TimeoutSec 20
         return [pscustomobject]@{
             LastModified = $resp.Headers['Last-Modified']
-            Length       = $resp.Headers['Content-Length']
+            Length       = $resp.Headers['Content-Range']
         }
     } catch { return $null }
 }

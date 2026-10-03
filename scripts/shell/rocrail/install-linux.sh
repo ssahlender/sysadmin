@@ -155,6 +155,9 @@ esac
 # systemd expands "%" specifiers and "$" variables in unit files, so neither may appear in
 # anything that ends up in the generated unit.
 case "$WORKSPACE_NAME$WORKSPACE_DIR${PREFIX}${UNIT_PATH}" in
+  *[[:space:]]*) die "spaces and tabs are not supported in paths or names (they break the generated systemd unit)" ;;
+esac
+case "$WORKSPACE_NAME$WORKSPACE_DIR${PREFIX}${UNIT_PATH}" in
   *%*) die "paths and names must not contain '%' (systemd expands it in unit files)" ;;
   *'$'*) die "paths and names must not contain '\$' (systemd expands it in unit files)" ;;
 esac
@@ -535,6 +538,31 @@ if [ -d "$PREFIX" ]; then
 fi
 if [ -n "$CARRIED" ]; then
   log "Carried over into the new build:${CARRIED}"
+fi
+
+# Files the vendor build ALSO ships cannot be "carried over" - but if the copy in the prefix
+# differs from the vendor default, the prefix holds a live workspace (exactly what the old
+# install.sh produced, with no -w). Replacing it would destroy that configuration, and
+# <prefix>.prev is deleted by the next run, so this refuses unless forced.
+COLLIDED=""
+for f in rocrail.ini plan.xml occ.xml; do
+  if [ -f "${PREFIX}/${f}" ] && [ -f "${STAGE}/${f}" ] && ! cmp -s "${PREFIX}/${f}" "${STAGE}/${f}"; then
+    COLLIDED="${COLLIDED} ${f}"
+  fi
+done
+if [ -n "$COLLIDED" ]; then
+  warn "these files exist in ${PREFIX} AND in the vendor build, and they DIFFER:${COLLIDED}"
+  warn "so ${PREFIX} contains a live workspace/configuration, and the new build's defaults"
+  warn "would replace it (<prefix>.prev is deleted by the next run)."
+  if [ "$FORCE" -eq 0 ]; then
+    die "refusing to overwrite a configuration inside the prefix.
+Move the workspace out of ${PREFIX} (the supported layout), or re-run with --force to keep
+the current copies as <name>.from-previous."
+  fi
+  for f in $COLLIDED; do
+    cp -p "${PREFIX}/${f}" "${STAGE}/${f}.from-previous"
+  done
+  warn "kept the current versions as *.from-previous in ${PREFIX}"
 fi
 
 # --------------------------------------------------------------------- stop + swap
