@@ -95,6 +95,24 @@ function Get-InstalledRevision {
     return ''
 }
 
+function Stop-RocrailProcesses {
+    # Rocview is a GUI client and flushes its settings on a normal exit, so ask it to close before
+    # forcing it. -Force is the fallback here, not the first move.
+    $procs = @(Get-Process -Name 'rocrail', 'rocview' -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return @() }
+    foreach ($p in $procs) {
+        try { if ($p.MainWindowHandle -ne 0) { [void]$p.CloseMainWindow() } } catch { }
+    }
+    foreach ($p in $procs) {
+        try { [void]$p.WaitForExit(10000) } catch { }
+    }
+    $leftover = @(Get-Process -Name 'rocrail', 'rocview' -ErrorAction SilentlyContinue)
+    foreach ($p in $leftover) {
+        try { $p.Kill() } catch { }
+    }
+    return $leftover
+}
+
 function Get-AdvertisedRevision {
     try {
         $resp = Invoke-WebRequest -Uri $RevisionUrl -UseBasicParsing -TimeoutSec 20
@@ -193,10 +211,15 @@ if ($Uninstall) {
         exit 0
     }
 
-    Get-Process -Name 'rocrail', 'rocview' -ErrorAction SilentlyContinue |
-        Stop-Process -Force
+    Stop-RocrailProcesses | Out-Null
 
     Write-Log "Removing $InstallDir"
+    # Say what this actually removes: anything the user keeps INSIDE the install directory (a
+    # local rocrail.ini, a lic.dat, backups) goes with it - the old wording claimed otherwise.
+    foreach ($f in @('lic.dat', 'rocrail.ini')) {
+        $inner = Join-Path $InstallDir $f
+        if (Test-Path -LiteralPath $inner) { Write-Warn "$f is inside $InstallDir and is removed with it" }
+    }
     Remove-Item -LiteralPath $InstallDir -Recurse -Force
 
     if (-not $NoShortcut) {
@@ -205,7 +228,7 @@ if ($Uninstall) {
             if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Force }
         }
     }
-    Write-Log 'Removed. Workspaces, plans, rocrail.ini and lic.dat were NOT touched.'
+    Write-Log 'Removed. Workspaces, plans and anything outside the install directory were not touched.'
     exit 0
 }
 
@@ -225,37 +248,90 @@ if (-not (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue)) {
     throw 'BITS is not available (Start-BitsTransfer missing). Enable the BitsTransfer module.'
 }
 
-# ---------------------------------------------------------------- stop running instances
-$running = Get-Process -Name 'rocrail', 'rocview' -ErrorAction SilentlyContinue
-if ($running) {
-    Write-Log "Stopping $($running.Count) running Rocrail process(es)."
-    $running | Stop-Process -Force
-    foreach ($p in $running) {
-        try { $p.WaitForExit(15000) | Out-Null } catch { }
+# ---------------------------------------------------------------- nothing to do?
+# A client has no options to adopt and no service to reconcile, so an unchanged archive means an
+# unchanged installation - and rotating .prev with the same build only makes a later rollback
+# restore what is already installed. Runs before anything is stopped or downloaded.
+#
+# The archive's Last-Modified is read BEFORE it is fetched (and reused for the record below).
+# Reading it afterwards races the vendor: a re-publish mid-download would store the newer value
+# against the older content, and this check would then skip a needed update forever. Read first,
+# the harmless failure is the other way round - the next run simply updates again.
+$remoteBefore = Get-RemoteInfo -Url $Url
+
+if (-not $Force -and (Test-Path -LiteralPath (Join-Path $InstallDir 'revision.info')) -and
+    (Test-Path -LiteralPath (Join-Path $InstallDir 'install-record.json'))) {
+    $recPath = Join-Path $InstallDir 'install-record.json'
+    $rec = $null
+    try { $rec = (Get-Content -LiteralPath $recPath -Raw | ConvertFrom-Json) } catch { $rec = $null }
+    $recLm = $null
+    if ($rec) {
+        $recLmProp = $rec.PSObject.Properties['archive_last_modified']
+        if ($recLmProp) { $recLm = $recLmProp.Value }
     }
+    if ($recLm -and $remoteBefore -and $remoteBefore.LastModified -eq $recLm) {
+        Write-Log "Already up to date: revision $(Get-InstalledRevision -Root $InstallDir), this archive is unchanged."
+        Write-Log 'Nothing to do. Use -Force to reinstall anyway.'
+        exit 0
+    }
+}
+
+# ---------------------------------------------------------------- stop running instances
+$running = @(Get-Process -Name 'rocrail', 'rocview' -ErrorAction SilentlyContinue)
+if ($running.Count -gt 0) {
+    Write-Log "Stopping $($running.Count) running Rocrail process(es)."
+    Stop-RocrailProcesses | Out-Null
 }
 
 # ---------------------------------------------------------------- download
 $tmpZip = Join-Path $env:TEMP $Archive
 if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force }
 
-Write-Log "Downloading $Archive"
-$attempt = 0
-while ($true) {
-    $attempt++
-    try {
-        # Without -Asynchronous this transfers in the foreground, returns no job and needs no
-        # Complete-BitsTransfer, so there is no job to clean up when an attempt fails.
-        Start-BitsTransfer -Source $Url -Destination $tmpZip -TransferType Download -ErrorAction Stop
-        if (-not (Test-Path -LiteralPath $tmpZip)) {
-            throw 'the transfer reported success but produced no file'
-        }
-        break
-    } catch {
-        if ($attempt -ge 3) { throw "download failed after $attempt attempts: $($_.Exception.Message)" }
-        Write-Warn "download attempt $attempt failed; retrying in 5s"
-        Start-Sleep -Seconds 5
+function Get-ArchiveWithBits {
+    param([string]$Source, [string]$Destination)
+    # Without -Asynchronous this transfers in the foreground, returns no job and needs no
+    # Complete-BitsTransfer, so there is no job left behind when an attempt fails.
+    Start-BitsTransfer -Source $Source -Destination $Destination -TransferType Download -ErrorAction Stop
+    if (-not (Test-Path -LiteralPath $Destination)) {
+        throw 'the transfer reported success but produced no file'
     }
+}
+
+function Get-ArchiveWithHttp {
+    param([string]$Source, [string]$Destination)
+    # PS 5.1 draws a progress bar per chunk, which makes a 30 MB file crawl.
+    $previous = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        Invoke-WebRequest -Uri $Source -OutFile $Destination -UseBasicParsing -TimeoutSec 300 -ErrorAction Stop
+    } finally { $ProgressPreference = $previous }
+    if (-not (Test-Path -LiteralPath $Destination)) {
+        throw 'the download reported success but produced no file'
+    }
+}
+
+Write-Log "Downloading $Archive"
+$bitsError = ''
+$got = $false
+for ($attempt = 1; $attempt -le 3 -and -not $got; $attempt++) {
+    try { Get-ArchiveWithBits -Source $Url -Destination $tmpZip; $got = $true }
+    catch {
+        $bitsError = $_.Exception.Message
+        if ($attempt -lt 3) {
+            Write-Warn "BITS attempt $attempt failed; retrying in 5s"
+            Start-Sleep -Seconds 5
+        }
+    }
+}
+if (-not $got) {
+    # BITS requires a logged-on interactive session. Driven through PSRP, Ansible or a service it
+    # fails with 0x800704DD ("the user has not logged on to the network") even though the BITS
+    # service is running and Start-BitsTransfer exists - verified on a real host. A plain HTTP
+    # request works there, and which mechanism fetched the file matters less than the update
+    # working at all.
+    Write-Warn "BITS could not download the archive: $bitsError"
+    Write-Warn 'falling back to a direct HTTP download'
+    Get-ArchiveWithHttp -Source $Url -Destination $tmpZip
 }
 
 # Declared here, not inside the try: under Set-StrictMode the catch below must be able to
@@ -328,7 +404,7 @@ try {
     Copy-Item -LiteralPath $tmpZip -Destination (Join-Path $InstallDir $Archive) -Force
     $hash = (Get-FileHash -LiteralPath $tmpZip -Algorithm SHA256).Hash.ToLower()
     $rev  = Get-InstalledRevision -Root $InstallDir
-    $remoteInfo = Get-RemoteInfo -Url $Url
+    $remoteInfo = $remoteBefore
     [pscustomobject]@{
         revision  = $(if ($rev) { $rev } else { 'unknown' })
         file      = $Archive

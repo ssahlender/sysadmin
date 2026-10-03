@@ -126,6 +126,24 @@ case "$WORKSPACE" in
   /*) ;;
   *) die "the resolved workspace is not an absolute path: '$WORKSPACE' (pass --workspace DIR)" ;;
 esac
+# The install record and the unit can disagree: --rollback restores the older sidecar while the
+# unit keeps the newer options, and an update can write one without the other. Enabling Rocweb in
+# the wrong workspace looks like success and does nothing, so refuse rather than pick one.
+u_ws="$(unit_arg -w)"
+u_ws="${u_ws%/}"
+if [ -n "$u_ws" ] && [ "$u_ws" != "$WORKSPACE" ]; then
+  if [ "$WS_SET" -eq 1 ]; then
+    warn "you asked for workspace ${WORKSPACE}, but ${UNIT_PATH} runs with -w ${u_ws}."
+    warn "Editing the one you named; the running server will not pick the change up."
+  else
+    die "the workspace to edit is ambiguous:
+  the install record says   ${WORKSPACE}
+  ${UNIT_PATH} runs with -w ${u_ws}
+Refusing to edit a workspace the server does not use. Pass --workspace DIR to choose one
+deliberately, or fix whichever of the two is wrong."
+  fi
+fi
+
 if [ ! -d "$WORKSPACE" ]; then
   warn "the workspace directory does not exist yet: $WORKSPACE"
 fi
@@ -137,6 +155,22 @@ fi
 
 INI="${WORKSPACE}/rocrail.ini"
 
+# The ini, not the command line, is the truth about what is configured - so it is read back
+# rather than assumed, in both the status output and the collision checks below.
+ini_webclient_port() { # the <webclient port="N"> of this workspace
+  [ -f "$INI" ] || return 0
+  awk 'match($0, /<webclient[^>]*port="[0-9]+"/) {
+         s = substr($0, RSTART, RLENGTH); sub(/.*port="/, "", s); sub(/".*/, "", s); print s; exit
+       }' "$INI" 2>/dev/null || true
+}
+
+ini_http_port() { # the <http port="N"> = the Server-Monitor's port
+  [ -f "$INI" ] || return 0
+  awk 'match($0, /<http[^>]*port="[0-9]+"/) {
+         s = substr($0, RSTART, RLENGTH); sub(/.*port="/, "", s); sub(/".*/, "", s); print s; exit
+       }' "$INI" 2>/dev/null || true
+}
+
 # ---------------------------------------------------------------- status
 if [ "$ACTION" = "status" ]; then
   log "workspace      : $WORKSPACE"
@@ -145,12 +179,14 @@ if [ "$ACTION" = "status" ]; then
     log "state          : no rocrail.ini (start the server once - it creates the workspace)"
     exit 2
   fi
-  CUR="$(awk 'match($0, /<webclient[^>]*port="[0-9]+"/) { s=substr($0, RSTART, RLENGTH); sub(/.*port="/, "", s); sub(/".*/, "", s); print s; exit }' "$INI" 2>/dev/null || true)"
+  CUR="$(ini_webclient_port)"
   log "rocweb port    : ${CUR:-<not configured>}"
   if [ -n "$CUR" ] && [ "$CUR" != "0" ]; then
     if command -v curl >/dev/null 2>&1; then
       HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
       CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${CUR}/" 2>/dev/null || true)"
+      # curl prints 000 when it could not connect at all; report that as "no answer", not as a code
+      case "$CODE" in 000) CODE="" ;; esac
       log "listening      : ${CODE:-no answer}"
       if [ -n "$HOST_IP" ]; then log "url            : http://${HOST_IP}:${CUR}/"; fi
       if [ "$CODE" = "200" ]; then exit 0; fi
@@ -188,17 +224,46 @@ fi
 TARGET_PORT="$PORT"
 [ "$ACTION" = "disable" ] && TARGET_PORT="0"
 
+# Everything that can fail happens before the service is stopped: a port that is already taken
+# would otherwise leave the server DOWN as well as Rocweb unconfigured.
+if [ "$TARGET_PORT" != "0" ]; then
+  UNIT_PORT="$(unit_arg -p)"
+  if [ -n "$UNIT_PORT" ] && [ "$TARGET_PORT" = "$UNIT_PORT" ]; then
+    die "Rocweb port ${TARGET_PORT} is the port the server itself serves clients on (-p ${UNIT_PORT})"
+  fi
+  # --monitor-port is only an input; if the ini already pins the Server-Monitor port, say that
+  # this run changes it rather than silently moving the monitor.
+  EX_HTTP="$(ini_http_port)"
+  if [ -n "$EX_HTTP" ] && [ "$EX_HTTP" != "$SERVER_MONITOR_PORT" ]; then
+    warn "${INI} already serves the Server-Monitor on ${EX_HTTP}; this run changes that to ${SERVER_MONITOR_PORT}."
+  fi
+  # Listening already? Ignore this workspace's own Rocweb, which is about to be restarted.
+  if [ "$(ini_webclient_port)" != "$TARGET_PORT" ] && command -v ss >/dev/null 2>&1; then
+    if ss -ltn "sport = :${TARGET_PORT}" 2>/dev/null | grep -q LISTEN; then
+      warn "port ${TARGET_PORT} is already in use:"
+      ss -ltnp "sport = :${TARGET_PORT}" 2>/dev/null | sed 's/^/    /' || true
+      die "refusing to configure Rocweb on port ${TARGET_PORT}"
+    fi
+  fi
+fi
+
 WAS_ACTIVE=0
-if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
+# is-activating matters as much as is-active here: a crash-looping unit sits in
+# "activating (auto-restart)", so testing only is-active would edit the ini underneath a live
+# process that rewrites it at shutdown.
+if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null \
+   || systemctl is-activating --quiet "$UNIT_NAME" 2>/dev/null; then
   WAS_ACTIVE=1
   log "Stopping ${UNIT_NAME} (Rocrail rewrites the ini at shutdown)."
   systemctl stop "$UNIT_NAME"
   # Wait for it to actually go inactive before touching the file.
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null || break
+    systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null \
+      || systemctl is-activating --quiet "$UNIT_NAME" 2>/dev/null || break
     sleep 1
   done
-  if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
+  if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null \
+     || systemctl is-activating --quiet "$UNIT_NAME" 2>/dev/null; then
     die "${UNIT_NAME} did not stop; not editing the ini"
   fi
 fi
@@ -338,11 +403,21 @@ if [ "$WAS_ACTIVE" -eq 0 ]; then
   exit 0
 fi
 
-# give the server a moment, then prove it really answers
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${PORT}/" 2>/dev/null || true)"
-  [ "$CODE" = "200" ] && break
-  sleep 1
+# Give it time: a Pi with a large plan can take a while to open the port, and the old 10 s window
+# could report failure for a correct edit. Then require the page to look like Rocweb - a foreign
+# service answering 200 on that port would otherwise pass for success.
+CODE=""
+for _ in $(seq 1 30); do
+  RESP="$(curl -sS -w '\n%{http_code}' --max-time 2 "http://127.0.0.1:${PORT}/" 2>/dev/null || true)"
+  CODE="${RESP##*$'\n'}"
+  BODY="${RESP%$'\n'*}"
+  if [ "$CODE" = "200" ] && printf '%s' "$BODY" | grep -qi 'rocrail'; then
+    break
+  fi
+  if [ "$CODE" = "200" ]; then
+    warn "port ${PORT} answers 200 but the page does not look like Rocrail - still waiting"
+  fi
+  sleep 2
 done
 
 log ""

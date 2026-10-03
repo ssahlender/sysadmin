@@ -98,12 +98,12 @@ fi
 # Read to EOF: closing a pipe early (head) makes the producer exit non-zero and would abort
 # the script under "set -o pipefail".
 advertised_revision() {
-  curl -fsSL --max-time 20 "$REVISION_URL" 2>/dev/null \
+  curl -fsSL --proto-redir =https --max-time 20 "$REVISION_URL" 2>/dev/null \
     | awk 'NR==1 { first=$1 } END { if (first != "") print first }' || true
 }
 
 remote_last_modified() {
-  curl -fsSIL --max-time 20 "$DOWNLOAD_URL" 2>/dev/null \
+  curl -fsSIL --proto-redir =https --max-time 20 "$DOWNLOAD_URL" 2>/dev/null \
     | awk 'tolower($1)=="last-modified:" { if (lm=="") lm=substr($0, index($0," ")+1) } END { if (lm!="") print lm }' || true
 }
 
@@ -221,7 +221,7 @@ fi
 mkdir -p "$STATE_DIR"
 TMP_ZIP="${STATE_DIR}/${FILENAME}"
 log "Downloading ${FILENAME}"
-curl -fL --retry 3 --retry-delay 2 -o "${TMP_ZIP}.part" "$DOWNLOAD_URL" || die "download failed"
+curl -fL --proto-redir =https --retry 3 --retry-delay 2 -o "${TMP_ZIP}.part" "$DOWNLOAD_URL" || die "download failed"
 mv -f "${TMP_ZIP}.part" "$TMP_ZIP"
 
 # --------------------------------------------------------------------- install
@@ -233,7 +233,15 @@ if [ -n "$PORTABLE_DIR" ]; then
   mkdir -p "$DEST"
 else
   DEST="${DESTINATION%/}"
-  [ -d "$DEST" ] || die "destination does not exist: $DEST"
+  # ~/Applications does not exist on a fresh account, which made --user-apps die with
+  # "destination does not exist". Create a directory that is ours to create; still refuse for a
+  # path we should not invent, such as a mistyped /Applications subdirectory.
+  if [ ! -d "$DEST" ]; then
+    case "$DEST" in
+      "${HOME}"/*) mkdir -p "$DEST" || die "could not create ${DEST}" ;;
+      *) die "destination does not exist: $DEST" ;;
+    esac
+  fi
   [ -w "$DEST" ] || die "$DEST is not writable by $(id -un); use --user-apps or sudo"
 fi
 
