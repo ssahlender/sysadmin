@@ -130,6 +130,7 @@ $Url     = "$SnapshotBase/$Archive"
 
 # ---------------------------------------------------------------- check
 if ($Check) {
+  try {
     $installed = Get-InstalledRevision -Root $InstallDir
     $advertised = Get-AdvertisedRevision
     $remote = Get-RemoteInfo -Url $Url
@@ -138,12 +139,20 @@ if ($Check) {
     if (Test-Path -LiteralPath $recordPath) {
         try { $recorded = (Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json) } catch { $recorded = $null }
     }
+    # Under Set-StrictMode a missing property THROWS (verified on PS 5.1), and a record
+    # written by an earlier revision has no archive_last_modified - which turned -Check into a
+    # false "update available" (exit 1). PSObject.Properties returns $null instead.
+    $recLm = $null
+    if ($recorded) {
+        $recLmProp = $recorded.PSObject.Properties['archive_last_modified']
+        if ($recLmProp) { $recLm = $recLmProp.Value }
+    }
 
     Write-Log "platform        : $Build   build: $Archive"
     Write-Log "install dir     : $InstallDir"
     Write-Log "url             : $Url"
     Write-Log "installed       : $(if ($installed) { $installed } else { '<not installed>' })"
-    Write-Log "installed from  : $(if ($recorded -and $recorded.archive_last_modified) { $recorded.archive_last_modified } else { '<not recorded>' })"
+    Write-Log "installed from  : $(if ($recLm) { $recLm } else { '<not recorded>' })"
     Write-Log "available (file): $(if ($remote) { $remote.LastModified } else { '<unavailable>' })"
     Write-Log "newest overall  : $(if ($advertised) { $advertised } else { '<unavailable>' })   (any platform; informational)"
 
@@ -157,12 +166,18 @@ if ($Check) {
         Write-Log 'verdict         : UNKNOWN - could not reach the archive, nothing was compared'
         exit 3
     }
-    if ($recorded -and $recorded.archive_last_modified -eq $remote.LastModified) {
+    if ($recLm -eq $remote.LastModified) {
         Write-Log 'verdict         : up to date (this archive is unchanged)'
         exit 0
     }
     Write-Log "verdict         : UPDATE AVAILABLE (archive changed since install)"
     exit 1
+  } catch {
+    # exit 1 means "update available" - a monitoring probe acting on that would try to
+    # install. An unexpected error is not that, so report it as unknown.
+    Write-Log "verdict         : UNKNOWN - the check itself failed: $($_.Exception.Message)"
+    exit 3
+  }
 }
 
 # ---------------------------------------------------------------- uninstall
@@ -247,6 +262,9 @@ while ($true) {
 # reference them even if the failure happens before they would have been assigned.
 $stage = "$InstallDir.new"
 $prev  = "$InstallDir.prev"
+# Set only when the swap has actually happened. The catch below must not "restore" a
+# leftover .prev from an earlier run over a perfectly good current install.
+$swapped = $false
 
 try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -280,9 +298,28 @@ try {
         throw "the archive contains no bin\rocview.exe; refusing to swap"
     }
 
+    # Carry over anything the vendor does not ship. The shortcut runs Rocview with the install
+    # directory as its working directory, so this is where a user's own rocrail.ini, any
+    # *.bak and lic.dat live - the swap would push them into .prev and the NEXT update would
+    # delete them. The vendor archives ship none of these at their root (verified), so
+    # "not present in the stage" is exactly the right test.
+    if (Test-Path -LiteralPath $InstallDir) {
+        $carried = @()
+        foreach ($item in (Get-ChildItem -LiteralPath $InstallDir -Force)) {
+            if ($item.Name -in @('install-record.json', 'install-options.conf')) { continue }
+            if ($item.Name -like 'Rocrail-*.zip') { continue }
+            if ($item.Name -like '*.prev') { continue }
+            if (Test-Path -LiteralPath (Join-Path $stage $item.Name)) { continue }
+            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $stage $item.Name) -Recurse -Force
+            $carried += $item.Name
+        }
+        if ($carried.Count -gt 0) { Write-Log "Carried over into the new build: $($carried -join ', ')" }
+    }
+
     if (Test-Path -LiteralPath $InstallDir) {
         if (Test-Path -LiteralPath $prev) { Remove-Item -LiteralPath $prev -Recurse -Force }
         Move-Item -LiteralPath $InstallDir -Destination $prev
+        $swapped = $true
         Write-Log "Previous installation kept at $prev"
     }
     Move-Item -LiteralPath $stage -Destination $InstallDir
@@ -306,7 +343,7 @@ catch {
     # A throw after the old installation was moved aside would otherwise leave this machine
     # with NO installation. Put the previous one back and report the failure.
     Write-Warn "installation failed: $($_.Exception.Message)"
-    if ($prev -and (Test-Path -LiteralPath $prev)) {
+    if ($swapped -and $prev -and (Test-Path -LiteralPath $prev)) {
         if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
         if (Test-Path -LiteralPath $InstallDir) { Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
         Move-Item -LiteralPath $prev -Destination $InstallDir -Force

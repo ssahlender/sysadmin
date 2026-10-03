@@ -3,8 +3,12 @@
 This file records the evidence behind the scripts in this directory, so the claims in the READMEs
 can be checked rather than trusted. It deliberately contains no site-specific information.
 
-Verified against the Rocrail snapshot published **2026-10-02**, Linux build revision **7454**
-(x86_64 and aarch64) and macOS build **7458**.
+Verified against the builds published on **2026-10-03**. Revisions here are per-platform and
+change with every snapshot, so none is pinned: read the one you care about from the archive's own
+`revision.info`. As checked on that date, `debian11-i64`, `debian13-ARM64` and `Windows-WIN64`
+all reported **7454** while `Windows-WIN32` reported **7400** - which is exactly why a single
+pinned number is misleading. The macOS `.app.zip` carries **no `revision.info` at all**, so a
+macOS revision cannot be read from the artifact (only the history feed names one).
 
 ## Measured, on a real install
 
@@ -19,15 +23,20 @@ Verified against the Rocrail snapshot published **2026-10-02**, Linux build revi
 | Rocweb is a separate service | Inserted `<http><webclient port="8088" .../></http>`, restarted | `200`, `<title>Rocrail WEB Client</title>` on **8088**, while 8008 stayed up |
 | The Rocweb element survives | Insert → start → clean stop → re-read, twice | Element still present; Rocrail kept its own `rocrail.ini.bak` |
 | Rocview is a client | `rocview -h 127.0.0.1 -p <port>` against a throwaway server | ESTABLISHED TCP connection; a bare `rocview` instead fails on `localhost:8051` |
-| The vendor archive ships defaults | Listing of the extracted build | `rocrail.ini`, `plan.xml`, `occ.xml` present; **no `lic.dat`** |
-| `--check` on a live outdated install | Ran against a server on revision 7089 with 7454 published | Correct report, exit **1** |
+| What the vendor archives actually ship | `unzip -Z1` on the published archives | Root entries only: `desktoplink.sh readme.txt revision.info rocrail.png rocrail.sh start.html startrocrail.sh sysupdate.sh update.sh` (Debian/i64) and `desktoplink.cmd readme.txt revision.info rocview.cmd start.html` (Windows). **No `rocrail.ini`, no `plan.xml`, no `occ.xml`** - `plan.xml` exists only under `demo/` and `wikidemo/`. An earlier draft of this file claimed otherwise: those three files had been created by a Rocrail run inside the extraction directory, not shipped by the vendor. |
+| `--check` on a live outdated install | Ran against a real install one snapshot behind | Correct report, exit **1** |
 | `--check` where nothing is installed | Ran on a clean host | Exit **2** |
 | `rocweb.sh` idempotency | `enable` twice with different ports against a real unit | Second run **updated** the port; exactly one `<webclient>` element in the file |
 | `rocweb.sh disable` | Enable, then disable | Port set to `0`, Rocweb stops answering, Server-Monitor unaffected |
 | `install-windows.ps1` syntax | `Parser::ParseFile` on Windows, PowerShell 5.1 | Parse OK |
-| `install-windows.ps1 -Check` / `-DryRun` | Run on a real Windows host | Reported `available: 7454`, `NOT INSTALLED`, exit 2; dry run clean |
+| `install-windows.ps1 -Check` / `-DryRun` | Run on a real Windows host | Reported the archive's `Last-Modified`, `NOT INSTALLED`, exit 2; dry run clean |
 
 ## Claimed corrections — the operator was right, the earlier draft was wrong
+
+- **"I don't want hardcoded revisions."** Correct, and the earlier draft was worse than merely
+  stale: it credited revision **7458** to the macOS build, but that archive contains no
+  `revision.info`, so the number was inferred from history file names and never read from the
+  artifact. Pinned numbers are gone from the scripts; the per-platform facts are stated once, above.
 
 - **"The update never contains the layout."** Correct. The first draft of this work asserted that
   an in-place update would overwrite a live configuration, reasoning from the vendor archive

@@ -13,7 +13,10 @@
 # first launch work; if macOS still objects, the vendor's documented fallback is a one-time
 # right-click -> Open.
 #
-# Verified against Rocrail revision 7458 (macOS build, 2026-10-03). See REVIEW.md.
+# Verified against the macOS build published on 2026-10-03. Note: the macOS .app.zip carries
+# NO revision.info inside it (verified), so unlike the Linux and Windows installers this script
+# can neither report nor compare a revision - the number exists only in the feed's history
+# filenames. See REVIEW.md.
 
 set -euo pipefail
 

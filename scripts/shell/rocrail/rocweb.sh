@@ -7,7 +7,8 @@
 # first start. A standalone helper works identically on the Raspberry Pi, on a container, and on
 # any future server, and it can be re-run whenever a workspace is replaced.
 #
-# Verified 2026-10-03 against Rocrail revision 7454:
+# Verified 2026-10-03 against the Rocrail build published that day (see REVIEW.md for the
+# per-platform revisions; none is pinned here because they change with every snapshot):
 #   * a hand-inserted <http>/<webclient> element SURVIVES Rocrail's own ini rewrite at shutdown
 #     (Rocrail keeps the previous file as rocrail.ini.bak), across repeated start/stop cycles;
 #   * Rocweb then answers on its port while the Server-Monitor keeps answering on 8008.
@@ -176,7 +177,10 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required to edit the ini s
 
 # One editor at a time: a concurrent run could rewrite the ini under this one.
 LOCK="${WORKSPACE}/.rocweb.lock"
-exec 9>"$LOCK" 2>/dev/null || die "cannot open lock file ${LOCK}"
+# NOT `exec 9>"$LOCK" 2>/dev/null`: redirections on a bare `exec` are permanent, so that
+# would send every die/warn for the rest of this run to /dev/null - including the python
+# refusals. See the same note in install-linux.sh.
+exec 9>"$LOCK" || die "cannot open lock file ${LOCK}"
 if command -v flock >/dev/null 2>&1; then
   flock -n 9 || die "another rocweb.sh run is already editing ${INI}"
 fi

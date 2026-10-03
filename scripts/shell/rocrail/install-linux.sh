@@ -16,8 +16,10 @@
 # installed configuration instead of reverting to defaults; and a build that fails to start is
 # rolled back automatically. No separate updater script is needed.
 #
-# Verified against Rocrail revision 7454 (2026-10-03). See REVIEW.md for what was verified
-# and what was not.
+# Behaviour verified against the builds published on 2026-10-03. No revision number is pinned
+# here: the builds are versioned per platform and change with every snapshot, so the only number
+# that means anything is the one inside the archive's own revision.info. See REVIEW.md for what
+# was verified and what was not.
 #
 # Exit codes for --check: 0 up to date, 1 update available, 2 not installed,
 #                          3 unknown (the archive could not be reached, nothing compared).
@@ -258,7 +260,7 @@ remote_last_modified() {
 }
 
 installed_revision() {
-  # "Revision: 7454 (i64, debian11)" -> "7454"
+  # "Revision: <n> (<arch>, <os>)" -> "<n>"
   [ -f "${PREFIX}/revision.info" ] || return 0
   awk '/^Revision:/{ print $2; exit }' "${PREFIX}/revision.info" 2>/dev/null || true
 }
@@ -453,8 +455,12 @@ fi
 # --------------------------------------------------------------------- exclusive lock
 # Two concurrent runs would otherwise share the staging and backup directories and could
 # delete each other's work mid-swap.
+mkdir -p "$PREFIX_PARENT" 2>/dev/null || true
 LOCK="${PREFIX}.lock"
-exec 9>"$LOCK" 2>/dev/null || die "cannot open lock file ${LOCK}"
+# NOT `exec 9>"$LOCK" 2>/dev/null`: redirections on a bare `exec` are permanent, so
+# that would send every die/warn and every journalctl excerpt for the rest of this
+# run to /dev/null. The lock file is created by the `exec` itself.
+exec 9>"$LOCK" || die "cannot open lock file ${LOCK}"
 if command -v flock >/dev/null 2>&1; then
   flock -n 9 || die "another run is already in progress (lock: ${LOCK})"
 else
@@ -540,29 +546,22 @@ if [ -n "$CARRIED" ]; then
   log "Carried over into the new build:${CARRIED}"
 fi
 
-# Files the vendor build ALSO ships cannot be "carried over" - but if the copy in the prefix
-# differs from the vendor default, the prefix holds a live workspace (exactly what the old
-# install.sh produced, with no -w). Replacing it would destroy that configuration, and
-# <prefix>.prev is deleted by the next run, so this refuses unless forced.
-COLLIDED=""
-for f in rocrail.ini plan.xml occ.xml; do
-  if [ -f "${PREFIX}/${f}" ] && [ -f "${STAGE}/${f}" ] && ! cmp -s "${PREFIX}/${f}" "${STAGE}/${f}"; then
-    COLLIDED="${COLLIDED} ${f}"
-  fi
-done
-if [ -n "$COLLIDED" ]; then
-  warn "these files exist in ${PREFIX} AND in the vendor build, and they DIFFER:${COLLIDED}"
-  warn "so ${PREFIX} contains a live workspace/configuration, and the new build's defaults"
-  warn "would replace it (<prefix>.prev is deleted by the next run)."
-  if [ "$FORCE" -eq 0 ]; then
-    die "refusing to overwrite a configuration inside the prefix.
-Move the workspace out of ${PREFIX} (the supported layout), or re-run with --force to keep
-the current copies as <name>.from-previous."
-  fi
-  for f in $COLLIDED; do
-    cp -p "${PREFIX}/${f}" "${STAGE}/${f}.from-previous"
-  done
-  warn "kept the current versions as *.from-previous in ${PREFIX}"
+# The carry-over above IS the protection, and it is sufficient. The vendor archive ships no
+# configuration or layout file at its root on any platform - verified against the published
+# builds: the Debian/i64 archive is desktoplink.sh readme.txt revision.info rocrail.png
+# rocrail.sh start.html startrocrail.sh sysupdate.sh update.sh (plan.xml appears only under
+# demo/ and wikidemo/), and the Windows archive is desktoplink.cmd readme.txt revision.info
+# rocview.cmd start.html. So a prefix holding rocrail.ini/plan.xml/occ.xml - an old install
+# whose workspace was the prefix itself - has every one of those files carried over rather
+# than replaced. There is nothing for the vendor files to collide with, which is also why
+# comparing against the previous archive's default would be meaningless here.
+#
+# Such a legacy prefix is still worth flagging: the files have moved into the new build, and
+# the unit expects the workspace elsewhere.
+if [ -f "${PREFIX}/rocrail.ini" ]; then
+  warn "${PREFIX} also contains a rocrail.ini, so this looks like a legacy install whose"
+  warn "workspace WAS the prefix. Those files were carried over into the new build, but"
+  warn "the unit expects its workspace at ${WORKSPACE_PATH} - move it there when convenient."
 fi
 
 # --------------------------------------------------------------------- stop + swap
