@@ -813,8 +813,38 @@ chmod 644 "${PREFIX}/install-options.conf" "${PREFIX}/install-record.json"
 
 # --------------------------------------------------------------------- workspace
 log "Preparing workspace ${WORKSPACE_PATH}"
+WS_EXISTED=0
+[ -d "$WORKSPACE_PATH" ] && WS_EXISTED=1
 mkdir -p "${WORKSPACE_PATH}/trace" "${WORKSPACE_PATH}/issues"
-chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "$WORKSPACE_PATH"
+if [ "$WS_EXISTED" -eq 0 ]; then
+  chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "$WORKSPACE_PATH"
+  log "  created, owned by ${SERVICE_USER}:${SERVICE_GROUP}"
+else
+  # Take ownership only of a workspace THIS script created. An existing one may deliberately
+  # belong to somebody else - a Resilio-synced tree is owned by rslsync on this fleet - and
+  # rewriting that ownership changes the operator's arrangement (and their sync) for no reason.
+  # All the server actually needs is to be able to write it, so check that instead.
+  ws_owner="$(stat -c '%U' "$WORKSPACE_PATH" 2>/dev/null || echo '?')"
+  ws_group="$(stat -c '%G' "$WORKSPACE_PATH" 2>/dev/null || echo '?')"
+  ws_mode="$(stat -c '%a' "$WORKSPACE_PATH" 2>/dev/null || echo '')"
+  ws_writable=0
+  [ "$ws_owner" = "$SERVICE_USER" ] && ws_writable=1
+  case "${ws_mode: -1}" in [2367]) ws_writable=1 ;; esac
+  if [ "$ws_writable" -eq 0 ]; then
+    case "${ws_mode: -2:1}" in
+      [2367]) id -Gn "$SERVICE_USER" 2>/dev/null | tr ' ' '\n' | grep -qx "$ws_group" && ws_writable=1 ;;
+    esac
+  fi
+  if [ "$ws_writable" -eq 1 ]; then
+    log "  existing workspace kept as ${ws_owner}:${ws_group} (mode ${ws_mode})"
+  else
+    warn "the workspace is owned by ${ws_owner}:${ws_group} (mode ${ws_mode}) while the service"
+    warn "runs as ${SERVICE_USER}:${SERVICE_GROUP} - the server may not be able to write it."
+    warn "Ownership was NOT changed: an existing workspace can deliberately belong to another"
+    warn "account (e.g. a Resilio-synced tree owned by rslsync). Fix it yourself, or pass"
+    warn "--user/--group to match what is already there."
+  fi
+fi
 chown -R root:root "$PREFIX" 2>/dev/null || true
 # The workspace is outside the prefix on purpose: replacing the build never touches a plan.
 
