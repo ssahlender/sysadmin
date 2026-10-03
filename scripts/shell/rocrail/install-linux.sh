@@ -10,15 +10,24 @@
 # prefix, generates a systemd unit FROM THE PARAMETERS YOU PASS (workspace and port are not
 # hardcoded), creates the workspace, and starts the service.
 #
-# Re-running it is the supported update path: the service is stopped, the build is replaced
-# atomically, the previous build is kept as <prefix>.prev, and the unit is regenerated.
+# Re-running it is the supported update path. The archive is validated and extracted into a
+# staging directory BEFORE the running service is touched; the previous build is kept as
+# <prefix>.prev; options of an existing install are adopted so a plain re-run reproduces the
+# installed configuration instead of reverting to defaults; and a build that fails to start is
+# rolled back automatically. No separate updater script is needed.
 #
 # Verified against Rocrail revision 7454 (2026-10-03). See REVIEW.md for what was verified
 # and what was not.
 #
-# Exit codes for --check: 0 = up to date, 1 = update available, 2 = not installed.
+# Exit codes for --check: 0 up to date, 1 update available, 2 not installed,
+#                          3 unknown (the archive could not be reached, nothing compared).
 
 set -euo pipefail
+
+# Keep the arguments as they were given. The parse loop below consumes "$@", and the sudo
+# re-exec further down must re-run this script with the SAME options - passing "$@" there
+# would re-run with an empty argument list and silently install the defaults.
+ORIG_ARGS=("$@")
 
 # --------------------------------------------------------------------- download matrix
 # Single source of truth for this script. Linux builds live under Debian/; the name encodes
@@ -38,6 +47,11 @@ UNIT_PATH="/etc/systemd/system/rocrail.service"
 CONSOLE_MODE=0
 DRY_RUN=0
 MODE="install"          # install | check | rollback
+
+# Which options were given explicitly. Options NOT given are adopted from an existing install
+# (see "adopt recorded options"), so re-running never silently reverts a setting.
+WS_SET=0; WSDIR_SET=0; PORT_SET=0; USER_SET=0; GROUP_SET=0; VARIANT_SET=0
+CONSOLE_SET=0; UNIT_SET=0
 
 # --------------------------------------------------------------------- helpers
 log()  { printf '%s\n' "$*"; }
@@ -62,26 +76,34 @@ Usage: install-linux.sh [options]
   --dry-run              show what would be done, change nothing
   -h, --help             this help
 
+On re-run, options you do NOT pass are adopted from the existing install, so a plain re-run
+keeps the installed workspace, port and account instead of reverting to the defaults.
+
+--check exits 0 (up to date), 1 (update available), 2 (not installed) or 3 (the archive
+could not be reached, so nothing was compared).
+
 Notes:
   * The Rocrail Server-Monitor always listens on port 8008 by default; Rocweb (the browser
     client) is per-workspace, ships disabled, and is enabled with the separate rocweb.sh.
   * A workspace is created by the server on first start (rocrail.ini, plan.xml, occ.xml,
     trace/, issues/). This script only makes the directory and hands it to the service user.
+  * Only the vendor archive is verified (TLS + zip CRC): the vendor publishes no checksum or
+    signature, so there is no trusted digest to compare against.
 EOF
 }
 
 # --------------------------------------------------------------------- arguments
 while [ $# -gt 0 ]; do
   case "$1" in
-    --workspace)      WORKSPACE_NAME="${2:-}"; shift 2 ;;
-    --workspace-dir)  WORKSPACE_DIR="${2:-}";  shift 2 ;;
-    --port)           SERVICE_PORT="${2:-}";   shift 2 ;;
+    --workspace)      WORKSPACE_NAME="${2:-}"; WS_SET=1;      shift 2 ;;
+    --workspace-dir)  WORKSPACE_DIR="${2:-}";  WSDIR_SET=1;   shift 2 ;;
+    --port)           SERVICE_PORT="${2:-}";   PORT_SET=1;    shift 2 ;;
     --prefix)         PREFIX="${2:-}";         shift 2 ;;
-    --user)           SERVICE_USER="${2:-}";   shift 2 ;;
-    --group)          SERVICE_GROUP="${2:-}";  shift 2 ;;
-    --variant)        VARIANT="${2:-}";        shift 2 ;;
-    --unit-path)      UNIT_PATH="${2:-}";      shift 2 ;;
-    --console)        CONSOLE_MODE=1;          shift ;;
+    --user)           SERVICE_USER="${2:-}";   USER_SET=1;    shift 2 ;;
+    --group)          SERVICE_GROUP="${2:-}";  GROUP_SET=1;   shift 2 ;;
+    --variant)        VARIANT="${2:-}";        VARIANT_SET=1; shift 2 ;;
+    --unit-path)      UNIT_PATH="${2:-}";      UNIT_SET=1;    shift 2 ;;
+    --console)        CONSOLE_MODE=1;          CONSOLE_SET=1; shift ;;
     --check)          MODE="check";            shift ;;
     --rollback)       MODE="rollback";         shift ;;
     --dry-run)        DRY_RUN=1;               shift ;;
@@ -91,18 +113,85 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$SERVICE_GROUP" ] || SERVICE_GROUP="$SERVICE_USER"
+PREFIX="${PREFIX%/}"
+WORKSPACE_DIR="${WORKSPACE_DIR%/}"
+WORKSPACE_PATH="${WORKSPACE_DIR}/${WORKSPACE_NAME}"
+
+# --------------------------------------------------------------------- validation
+# Every value below ends up in a systemd unit or a shell command, so it is validated rather
+# than trusted: a newline in a name would inject unit directives.
+no_control_chars() { # $1 = value, $2 = option name
+  case "$1" in
+    *[![:print:]]*) die "$2 must not contain control characters or newlines" ;;
+  esac
+}
+
+no_control_chars "$WORKSPACE_NAME" "workspace name"
+no_control_chars "$WORKSPACE_DIR"  "workspace directory"
+no_control_chars "$PREFIX"         "prefix"
+no_control_chars "$UNIT_PATH"      "unit path"
+no_control_chars "$SERVICE_USER"   "user"
+no_control_chars "$SERVICE_GROUP"  "group"
 
 case "$WORKSPACE_NAME" in
-  */*|.|..|"") die "invalid workspace name: '$WORKSPACE_NAME'" ;;
+  .*|*/*|"") die "invalid workspace name: '$WORKSPACE_NAME' (no slashes, must not start with a dot)" ;;
 esac
+case "$WORKSPACE_NAME" in
+  *[!A-Za-z0-9._-]*) die "invalid workspace name: '$WORKSPACE_NAME' (letters, digits, dot, underscore, hyphen)" ;;
+esac
+case "$SERVICE_USER" in
+  [a-z_]*) ;;
+  *) die "invalid user name: '$SERVICE_USER' (must start with a lower-case letter or underscore)" ;;
+esac
+case "$SERVICE_USER$SERVICE_GROUP" in
+  *[!a-z0-9_-]*) die "invalid user/group name (lower-case letters, digits, underscore, hyphen)" ;;
+esac
+# Each path is checked separately. Concatenating them into one case pattern would pass as
+# soon as the FIRST component was absolute, hiding a relative prefix.
+case "$WORKSPACE_DIR" in /*) ;; *) die "workspace directory must be an absolute path: '$WORKSPACE_DIR'" ;; esac
+case "$PREFIX"        in /*) ;; *) die "prefix must be an absolute path: '$PREFIX'" ;; esac
+case "$UNIT_PATH"     in /*) ;; *) die "unit path must be an absolute path: '$UNIT_PATH'" ;; esac
 case "$SERVICE_PORT" in
   ''|*[!0-9]*) die "invalid port: '$SERVICE_PORT'" ;;
 esac
 [ "$SERVICE_PORT" -ge 1 ] && [ "$SERVICE_PORT" -le 65535 ] || die "port out of range: $SERVICE_PORT"
 
-PREFIX="${PREFIX%/}"
-WORKSPACE_DIR="${WORKSPACE_DIR%/}"
-WORKSPACE_PATH="${WORKSPACE_DIR}/${WORKSPACE_NAME}"
+# --------------------------------------------------------------------- adopt recorded options
+# An existing install records its effective options. Anything not passed on this run is taken
+# from there, so `install-linux.sh` alone updates in place instead of resetting the workspace,
+# port or account to the defaults.
+opt_from_record() { # $1 = key
+  [ -f "${PREFIX}/install-options.conf" ] || return 0
+  awk -F= -v k="$1" '$1 == k { print substr($0, index($0, "=") + 1); exit }' \
+      "${PREFIX}/install-options.conf" 2>/dev/null || true
+}
+
+adopt() { # $1=key  $2=current value  $3=1 if explicitly set on this run
+  if [ "$3" -eq 1 ]; then
+    printf '%s' "$2"
+    return
+  fi
+  local recorded
+  recorded="$(opt_from_record "$1")"
+  if [ -n "$recorded" ]; then printf '%s' "$recorded"; else printf '%s' "$2"; fi
+}
+
+if [ -f "${PREFIX}/install-options.conf" ]; then
+  ADOPTED=""
+  old="$WORKSPACE_NAME";  new="$(adopt WORKSPACE_NAME "$WORKSPACE_NAME" "$WS_SET")";    [ "$old" = "$new" ] || ADOPTED=1; WORKSPACE_NAME="$new"
+  old="$WORKSPACE_DIR";   new="$(adopt WORKSPACE_DIR  "$WORKSPACE_DIR"  "$WSDIR_SET")";  [ "$old" = "$new" ] || ADOPTED=1; WORKSPACE_DIR="$new"
+  old="$SERVICE_PORT";    new="$(adopt SERVICE_PORT   "$SERVICE_PORT"   "$PORT_SET")";    [ "$old" = "$new" ] || ADOPTED=1; SERVICE_PORT="$new"
+  old="$SERVICE_USER";    new="$(adopt SERVICE_USER   "$SERVICE_USER"   "$USER_SET")";    [ "$old" = "$new" ] || ADOPTED=1; SERVICE_USER="$new"
+  old="$SERVICE_GROUP";   new="$(adopt SERVICE_GROUP  "$SERVICE_GROUP"  "$GROUP_SET")";   [ "$old" = "$new" ] || ADOPTED=1; SERVICE_GROUP="$new"
+  old="$VARIANT";         new="$(adopt VARIANT        "$VARIANT"        "$VARIANT_SET")"; [ "$old" = "$new" ] || ADOPTED=1; VARIANT="$new"
+  old="$CONSOLE_MODE";    new="$(adopt CONSOLE_MODE   "$CONSOLE_MODE"   "$CONSOLE_SET")"; [ "$old" = "$new" ] || ADOPTED=1; CONSOLE_MODE="$new"
+  old="$UNIT_PATH";       new="$(adopt UNIT_PATH      "$UNIT_PATH"      "$UNIT_SET")";    [ "$old" = "$new" ] || ADOPTED=1; UNIT_PATH="$new"
+  WORKSPACE_PATH="${WORKSPACE_DIR}/${WORKSPACE_NAME}"
+  if [ -n "$ADOPTED" ]; then
+    log "Adopted the existing install's options from ${PREFIX}/install-options.conf"
+    log "  workspace ${WORKSPACE_PATH}  port ${SERVICE_PORT}  user ${SERVICE_USER}  console ${CONSOLE_MODE}"
+  fi
+fi
 
 # --------------------------------------------------------------------- architecture
 ARCH="$(uname -m)"
@@ -128,13 +217,14 @@ DOWNLOAD_URL="${SNAPSHOT_BASE}/Debian/${FILENAME}"
 # makes the producer exit non-zero, and with "set -o pipefail" that would abort the script -
 # which is exactly how --check died silently the first time it was run.
 advertised_revision() {
-  # Newest revision in the snapshot list. Empty on any failure - never fatal.
+  # Newest revision in the snapshot list - newest for ANY platform. Informational only:
+  # platforms are published at different times, so this is not this platform's version.
   curl -fsSL --max-time 20 "$REVISION_URL" 2>/dev/null \
     | awk 'NR==1 { first=$1 } END { if (first != "") print first }' || true
 }
 
 remote_last_modified() {
-  # HTTP Last-Modified of this platform's archive: the precise "available" signal.
+  # HTTP Last-Modified of THIS platform's archive: the precise "available" signal.
   local lm
   lm="$(curl -fsSIL --max-time 20 -o /dev/null -w '%{header_json}' "$DOWNLOAD_URL" 2>/dev/null \
         | tr -d '\n' | sed -n 's/.*"last-modified":\["\([^"]*\)".*/\1/p')" || true
@@ -158,20 +248,18 @@ installed_build() {
       "${PREFIX}/revision.info" 2>/dev/null || true
 }
 
-recorded_install() {
-  [ -f "${PREFIX}/install-record.json" ] || return 0
-  cat "${PREFIX}/install-record.json"
-}
-
 primary_ip() {
-  hostname -I 2>/dev/null | awk '{print $1}'
+  # Best effort: hostname -I fails on some minimal systems, and under pipefail that must not
+  # abort a report or --check.
+  hostname -I 2>/dev/null | awk '{print $1}' || true
 }
 
 # --------------------------------------------------------------------- check mode
 if [ "$MODE" = "check" ]; then
   rev_inst="$(installed_revision)"
-  rev_adv="$(advertised_revision)"
+  rev_newest="$(advertised_revision)"
   lmod="$(remote_last_modified)"
+  recorded_lm="$(opt_from_record ARCHIVE_LAST_MODIFIED)"
   ip="$(primary_ip)"
 
   log "platform        : $ARCH   build: $FILENAME"
@@ -179,21 +267,26 @@ if [ "$MODE" = "check" ]; then
   log "workspace       : $WORKSPACE_PATH"
   log "url             : $DOWNLOAD_URL"
   log "installed       : ${rev_inst:-<not installed>}${rev_inst:+ $(installed_build)}"
-  log "available (log) : ${rev_adv:-<unavailable>}"
-  log "available (file): ${lmod:-<unavailable>}"
-  if [ -n "$(recorded_install)" ]; then
-    log "last installed  : $(recorded_install | tr -d '\n')"
+  log "installed from  : ${recorded_lm:-<not recorded>}   (this archive's Last-Modified at install time)"
+  log "available (file): ${lmod:-<unavailable>}   (this archive, now)"
+  log "newest overall  : ${rev_newest:-<unavailable>}   (any platform, informational)"
+  if [ -f "${PREFIX}/install-record.json" ]; then
+    log "last installed  : $(tr -d '\n' < "${PREFIX}/install-record.json")"
   fi
 
   if [ -z "$rev_inst" ]; then
     log "verdict         : NOT INSTALLED"
     exit 2
   fi
-  if [ -n "$rev_adv" ] && [ "$rev_inst" = "$rev_adv" ]; then
-    log "verdict         : up to date"
+  if [ -z "$lmod" ]; then
+    log "verdict         : UNKNOWN - could not reach the archive, nothing was compared"
+    exit 3
+  fi
+  if [ -n "$recorded_lm" ] && [ "$recorded_lm" = "$lmod" ]; then
+    log "verdict         : up to date (this platform's archive is unchanged)"
     exit 0
   fi
-  log "verdict         : UPDATE AVAILABLE (installed ${rev_inst}, newest ${rev_adv:-unknown})"
+  log "verdict         : UPDATE AVAILABLE (this platform's archive changed since install)"
   if [ -n "$ip" ]; then
     log "note            : re-run without --check to update"
   fi
@@ -203,9 +296,7 @@ fi
 # --------------------------------------------------------------------- rollback mode
 if [ "$MODE" = "rollback" ]; then
   [ -d "${PREFIX}.prev" ] || die "no previous build at ${PREFIX}.prev"
-  [ "$(id -u)" -eq 0 ] || exec sudo "$0" --rollback \
-      --prefix "$PREFIX" --workspace "$WORKSPACE_NAME" --workspace-dir "$WORKSPACE_DIR" \
-      --unit-path "$UNIT_PATH" --user "$SERVICE_USER" --group "$SERVICE_GROUP"
+  [ "$(id -u)" -eq 0 ] || exec sudo "$0" "${ORIG_ARGS[@]}"
   log "Rolling back ${PREFIX} <- ${PREFIX}.prev"
   systemctl stop "$(basename "${UNIT_PATH%.service}")" 2>/dev/null || true
   rm -rf "${PREFIX}.rolledback"
@@ -230,15 +321,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${WORKSPACE_PATH}
+# The leading '-' makes systemd tolerate a missing directory instead of failing before any
+# command runs: without it the unit dies on chdir and ExecStartPre never gets the chance to
+# repair it (measured). WorkingDirectory is also where Rocrail looks for lic.dat.
+WorkingDirectory=-${WORKSPACE_PATH}
 Environment=LD_LIBRARY_PATH=${PREFIX}/bin
 ExecStart=${PREFIX}/bin/rocrail -w ${WORKSPACE_PATH} -l ${PREFIX}/bin -p ${SERVICE_PORT}${CONSOLE_ARG}
 ExecStartPre=/usr/bin/mkdir -p ${WORKSPACE_PATH}/trace ${WORKSPACE_PATH}/issues
 Restart=on-failure
 RestartSec=3
-# A client-issued shutdown exits with 70. Treat it as a clean stop so the shutdown is
-# honoured instead of being restarted 3 seconds later. Real failures (signals, other
-# exit codes) still restart. Use --console to stop clients issuing it at all.
+# A client-issued shutdown exits with 70. Treat it as a clean stop so the shutdown is honoured
+# instead of being restarted 3 seconds later. Real failures (signals, other exit codes) still
+# restart. This assumes exit 70 is reserved for an intentional shutdown; --console stops
+# clients issuing it at all.
 SuccessExitStatus=70
 User=${SERVICE_USER}
 Group=${SERVICE_GROUP}
@@ -248,6 +343,7 @@ Group=${SERVICE_GROUP}
 #NoNewPrivileges=yes
 #ProtectSystem=full
 #ReadWritePaths=${WORKSPACE_PATH}
+# resource limit rather than hardening; uncomment if you need many concurrent connections
 #LimitNOFILE=65535
 
 [Install]
@@ -274,13 +370,39 @@ fi
 # --------------------------------------------------------------------- root required
 if [ "$(id -u)" -ne 0 ]; then
   log "Root is required to write ${PREFIX} and ${UNIT_PATH}; re-running with sudo."
-  exec sudo "$0" "$@" 2>/dev/null || exec sudo -E "$0" "$@"
+  # ORIG_ARGS, not "$@": the parse loop above has already consumed "$@".
+  exec sudo "$0" "${ORIG_ARGS[@]}"
 fi
 
 # --------------------------------------------------------------------- prerequisites
 for tool in curl unzip systemctl; do
   command -v "$tool" >/dev/null 2>&1 || die "required tool not found: $tool"
 done
+
+PREFIX_PARENT="$(dirname "$PREFIX")"
+
+# A prefix whose parent the service account (or anyone else) can write to would let that
+# account replace the build it is served from.
+if [ -d "$PREFIX_PARENT" ]; then
+  mode="$(stat -c '%a' "$PREFIX_PARENT" 2>/dev/null || echo '')"
+  case "$mode" in
+    ?????) case "$mode" in *[2367][2367]) die "${PREFIX_PARENT} is group/other writable (mode ${mode}); use a root-owned prefix parent" ;; esac ;;
+  esac
+fi
+
+# A symlinked prefix would be destroyed by the swap, leaving the link pointing nowhere.
+[ -L "$PREFIX" ] && die "${PREFIX} is a symlink; the atomic swap needs a real directory"
+
+# --------------------------------------------------------------------- exclusive lock
+# Two concurrent runs would otherwise share the staging and backup directories and could
+# delete each other's work mid-swap.
+LOCK="${PREFIX}.lock"
+exec 9>"$LOCK" 2>/dev/null || die "cannot open lock file ${LOCK}"
+if command -v flock >/dev/null 2>&1; then
+  flock -n 9 || die "another run is already in progress (lock: ${LOCK})"
+else
+  warn "flock not found; concurrent runs are not prevented"
+fi
 
 # --------------------------------------------------------------------- service account
 if getent passwd "$SERVICE_USER" >/dev/null 2>&1; then
@@ -293,19 +415,21 @@ else
 fi
 
 # --------------------------------------------------------------------- download + verify
-PREFIX_PARENT="$(dirname "$PREFIX")"
 if [ -d "$PREFIX_PARENT" ]; then
   TMP_ZIP="$(mktemp "${PREFIX_PARENT}/.rocrail-dl.XXXXXX")"
 else
   TMP_ZIP="$(mktemp /tmp/.rocrail-dl.XXXXXX)"
 fi
-cleanup() { rm -f "$TMP_ZIP"; }
+STAGE="${PREFIX}.new.$$"
+cleanup() { rm -f "$TMP_ZIP"; rm -rf "$STAGE"; }
 trap cleanup EXIT
 
 log "Downloading ${FILENAME}"
 curl -fL --retry 3 --retry-delay 2 -o "$TMP_ZIP" "$DOWNLOAD_URL" \
   || die "download failed: $DOWNLOAD_URL"
 
+# Integrity is TLS plus the zip CRC: the vendor publishes no checksum or signature to compare
+# against (verified - .sha256, .md5 and sha256sum.txt on the snapshot host are all 404).
 unzip -tq "$TMP_ZIP" >/dev/null 2>&1 || die "downloaded file is not a valid zip: $DOWNLOAD_URL"
 
 ZIP_REV="$(unzip -p "$TMP_ZIP" revision.info 2>/dev/null \
@@ -320,62 +444,76 @@ if [ -n "$ADV_REV" ] && [ -n "$ZIP_REV" ] && [ "$ZIP_REV" != "$ADV_REV" ]; then
   warn "platforms are published at different times. Continuing with what was published for this platform."
 fi
 
-# --------------------------------------------------------------------- atomic install
+# --------------------------------------------------------------------- stage + validate FIRST
+# Everything that can fail happens before the running service is stopped, so a failed download
+# or a bad archive leaves a working install untouched.
+log "Extracting to ${STAGE}"
+mkdir -p "$STAGE"
+unzip -q -o "$TMP_ZIP" -d "$STAGE" || die "extraction failed; the running install is untouched"
+
+[ -x "${STAGE}/bin/rocrail" ] || die "the archive has no executable bin/rocrail; refusing to swap"
+[ -f "${STAGE}/revision.info" ] || warn "the archive has no revision.info (revision will show as unknown)"
+
+# --------------------------------------------------------------------- carry user files
+# The vendor build never ships a licence. The official documentation puts lic.dat in the
+# server's WORKING DIRECTORY - the workspace, which this script keeps outside the prefix and
+# never touches (the -lic option can point at an explicit path instead). Anything else living
+# in the prefix that is not part of the vendor build is carried over as well, rather than
+# warned about and then destroyed by the next run's cleanup of <prefix>.prev.
+CARRIED=""
+if [ -d "$PREFIX" ]; then
+  for f in $(ls -A "$PREFIX" 2>/dev/null || true); do
+    case "$f" in
+      *.prev|*.new.*|*.lock|*.rolledback|*.failed) continue ;;
+      install-options.conf|install-record.json) continue ;;
+    esac
+    [ -e "${STAGE}/${f}" ] && continue
+    if cp -a "${PREFIX}/${f}" "${STAGE}/${f}"; then
+      CARRIED="${CARRIED} ${f}"
+    else
+      warn "could not carry over ${f}"
+    fi
+  done
+fi
+if [ -n "$CARRIED" ]; then
+  log "Carried over into the new build:${CARRIED}"
+fi
+
+# --------------------------------------------------------------------- stop + swap
 if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
   log "Stopping ${UNIT_NAME}."
   systemctl stop "$UNIT_NAME"
 fi
 
-STAGE="${PREFIX}.new"
-rm -rf "$STAGE"
-log "Extracting to ${STAGE}"
-mkdir -p "$STAGE"
-unzip -q -o "$TMP_ZIP" -d "$STAGE" || die "extraction failed"
-
-# --------------------------------------------------------------------- carry user files
-# The vendor build never ships a licence. The official documentation puts lic.dat in the
-# server's WORKING DIRECTORY - that is the workspace, which this script keeps outside the
-# prefix and never touches (the -lic option can also point at an explicit path). A copy may
-# nevertheless sit in the prefix, so carry it over rather than dropping it. Anything else that
-# exists here but is not part of the new build is reported, never silently discarded.
-USER_FILES="lic.dat"
-CARRIED=""
-for f in $USER_FILES; do
-  if [ -f "${PREFIX}/${f}" ]; then
-    cp -p "${PREFIX}/${f}" "${STAGE}/${f}"
-    CARRIED="${CARRIED} ${f}"
-  fi
-done
-if [ -n "$CARRIED" ]; then
-  log "Carried over into the new build:${CARRIED}"
-fi
-
 if [ -d "$PREFIX" ]; then
-  EXTRA=""
-  for f in $(ls -A "$PREFIX" 2>/dev/null || true); do
-    case " $USER_FILES " in *" $f "*) continue ;; esac
-    [ -e "${STAGE}/${f}" ] || EXTRA="${EXTRA} ${f}"
-  done
-  if [ -n "$EXTRA" ]; then
-    warn "files present in ${PREFIX} that are not part of the new build:${EXTRA}"
-    warn "they are still in ${PREFIX}.prev - copy over anything you still need."
-    warn "a licence kept in the WORKSPACE (not here) is untouched either way."
-  fi
-
   rm -rf "${PREFIX}.prev"
   mv "$PREFIX" "${PREFIX}.prev"
   log "Previous build kept at ${PREFIX}.prev"
 fi
 mv "$STAGE" "$PREFIX"
 
-# Keep the downloaded archive inside the prefix (matches the reference install, and gives
-# --check something to compare the remote Last-Modified against).
+# Keep the downloaded archive inside the prefix (matches the reference install).
 cp -f "$TMP_ZIP" "${PREFIX}/${FILENAME}"
 
-# Record what was installed here, so "installed" is not inferred from a timestamp.
+# Record what was installed, and with which options: "installed" is then never inferred from
+# a timestamp, and a re-run reproduces the same configuration.
+ARCHIVE_LM="$(remote_last_modified)"
 cat > "${PREFIX}/install-record.json" <<EOF
-{"revision":"${ZIP_REV:-unknown}","build":"${ZIP_BUILD:-unknown}","file":"${FILENAME}","url":"${DOWNLOAD_URL}","sha256":"$(sha256sum "$TMP_ZIP" | awk '{print $1}')","installed":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installed_by":"install-linux.sh"}
+{"revision":"${ZIP_REV:-unknown}","build":"${ZIP_BUILD:-unknown}","file":"${FILENAME}","url":"${DOWNLOAD_URL}","sha256":"$(sha256sum "$TMP_ZIP" | awk '{print $1}')","archive_last_modified":"${ARCHIVE_LM}","installed":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installed_by":"install-linux.sh"}
 EOF
+
+cat > "${PREFIX}/install-options.conf" <<EOF
+WORKSPACE_NAME=${WORKSPACE_NAME}
+WORKSPACE_DIR=${WORKSPACE_DIR}
+SERVICE_PORT=${SERVICE_PORT}
+SERVICE_USER=${SERVICE_USER}
+SERVICE_GROUP=${SERVICE_GROUP}
+VARIANT=${VARIANT}
+CONSOLE_MODE=${CONSOLE_MODE}
+UNIT_PATH=${UNIT_PATH}
+ARCHIVE_LAST_MODIFIED=${ARCHIVE_LM}
+EOF
+chmod 644 "${PREFIX}/install-options.conf" "${PREFIX}/install-record.json"
 
 # --------------------------------------------------------------------- workspace
 log "Preparing workspace ${WORKSPACE_PATH}"
@@ -385,12 +523,33 @@ chown -R root:root "$PREFIX" 2>/dev/null || true
 # The workspace is outside the prefix on purpose: replacing the build never touches a plan.
 
 # --------------------------------------------------------------------- unit
+if [ -f "$UNIT_PATH" ]; then
+  cp -p "$UNIT_PATH" "${UNIT_PATH}.previous" 2>/dev/null || true
+fi
 log "Writing ${UNIT_PATH}"
 render_unit > "$UNIT_PATH"
 chmod 644 "$UNIT_PATH"
 systemctl daemon-reload
-systemctl enable "$UNIT_NAME" >/dev/null 2>&1 || true
-systemctl restart "$UNIT_NAME"
+if ! systemctl enable "$UNIT_NAME" >/dev/null 2>&1; then
+  warn "could not enable ${UNIT_NAME} at boot; it will still be started now"
+fi
+
+# --------------------------------------------------------------------- start, with rollback
+if ! systemctl restart "$UNIT_NAME"; then
+  warn "the new build did not start; rolling back to the previous one."
+  rm -rf "${PREFIX}.failed"
+  mv "$PREFIX" "${PREFIX}.failed"
+  if [ -d "${PREFIX}.prev" ]; then
+    mv "${PREFIX}.prev" "$PREFIX"
+    log "Previous build restored to ${PREFIX}"
+  fi
+  if [ -f "${UNIT_PATH}.previous" ]; then
+    cp -p "${UNIT_PATH}.previous" "$UNIT_PATH"
+    systemctl daemon-reload
+  fi
+  systemctl restart "$UNIT_NAME" || warn "the previous build also failed to start"
+  die "update failed and was rolled back; the failed build is kept at ${PREFIX}.failed"
+fi
 
 # --------------------------------------------------------------------- report
 IP="$(primary_ip)"
@@ -404,6 +563,7 @@ log "  Rocview    : point clients at ${IP:-<this host>}:${SERVICE_PORT}"
 log "  Monitor    : http://${IP:-<this host>}:8008/    (server status panel, always on)"
 log "  Rocweb     : per-workspace and disabled by default - enable with rocweb.sh enable"
 log ""
-log "Updating later: re-run this script. Rolling back: re-run with --rollback"
+log "Updating later: re-run this script (options are adopted from the existing install)."
+log "Rolling back:  re-run with --rollback"
 log "Do NOT use the Server-Monitor's Update / OS Update buttons: they write into a root-owned"
 log "prefix and will fail. This script is the supported update path."

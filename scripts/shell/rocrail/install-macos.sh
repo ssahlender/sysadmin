@@ -180,32 +180,43 @@ curl -fL --retry 3 --retry-delay 2 -o "${TMP_ZIP}.part" "$DOWNLOAD_URL" || die "
 mv -f "${TMP_ZIP}.part" "$TMP_ZIP"
 
 # --------------------------------------------------------------------- install
+# Install into a staging directory first and only then touch the live bundle, so there is no
+# moment where the app is absent. The previous bundle is MOVED to a backup rather than deleted,
+# and restored if the new one cannot be put in place.
 if [ -n "$PORTABLE_DIR" ]; then
-  log "Extracting into ${PORTABLE_DIR}"
-  mkdir -p "$PORTABLE_DIR"
-  ditto -x -k "$TMP_ZIP" "$PORTABLE_DIR"
-  TARGET="$APP_PATH"
+  DEST="${PORTABLE_DIR%/}"
+  mkdir -p "$DEST"
 else
-  DESTINATION="${DESTINATION%/}"
-  [ -d "$DESTINATION" ] || die "destination does not exist: $DESTINATION"
-  [ -w "$DESTINATION" ] || die "$DESTINATION is not writable by $(id -un); use --user-apps or sudo"
-
-  STAGE="$(mktemp -d "${DESTINATION%/}/.rocrail-stage.XXXXXX")"
-  trap 'rm -rf "$STAGE"' EXIT
-
-  log "Extracting into ${STAGE}"
-  # ditto, not unzip: unzip can break the code signature of an app bundle
-  ditto -x -k "$TMP_ZIP" "$STAGE" || die "extraction failed"
-  [ -d "${STAGE}/${APP_NAME}" ] || die "archive did not contain ${APP_NAME}"
-
-  if [ -d "$APP_PATH" ]; then
-    log "Removing previous ${APP_PATH}"
-    rm -rf "$APP_PATH"
-  fi
-  log "Installing to ${APP_PATH}"
-  mv "${STAGE}/${APP_NAME}" "$APP_PATH"
-  TARGET="$APP_PATH"
+  DEST="${DESTINATION%/}"
+  [ -d "$DEST" ] || die "destination does not exist: $DEST"
+  [ -w "$DEST" ] || die "$DEST is not writable by $(id -un); use --user-apps or sudo"
 fi
+
+STAGE="$(mktemp -d "${DEST}/.rocrail-stage.XXXXXX")"
+BACKUP_DIR="${DEST}/.rocrail-previous"
+trap 'rm -rf "$STAGE"' EXIT
+
+log "Extracting into ${STAGE}"
+# ditto, not unzip: unzip can break the code signature of an app bundle
+ditto -x -k "$TMP_ZIP" "$STAGE" || die "extraction failed; the installed app is untouched"
+[ -d "${STAGE}/${APP_NAME}" ] || die "the archive did not contain ${APP_NAME}; not installing"
+
+if [ -d "$APP_PATH" ]; then
+  mkdir -p "$BACKUP_DIR"
+  rm -rf "${BACKUP_DIR:?}/${APP_NAME}"
+  log "Moving the previous bundle aside to ${BACKUP_DIR}/${APP_NAME}"
+  mv "$APP_PATH" "${BACKUP_DIR}/${APP_NAME}" || die "could not move the previous bundle aside"
+fi
+
+log "Installing to ${APP_PATH}"
+if ! mv "${STAGE}/${APP_NAME}" "$APP_PATH"; then
+  warn "could not install to ${APP_PATH}"
+  if [ -d "${BACKUP_DIR}/${APP_NAME}" ]; then
+    mv "${BACKUP_DIR}/${APP_NAME}" "$APP_PATH" && log "previous bundle restored"
+  fi
+  die "installation failed"
+fi
+TARGET="$APP_PATH"
 
 # --------------------------------------------------------------------- quarantine
 log "Clearing the quarantine attribute on ${TARGET}"

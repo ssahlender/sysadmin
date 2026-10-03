@@ -6,6 +6,8 @@
   Role split: Windows is a client (Rocview, the GUI). No service, no server and no autostart
   are configured - Rocview attaches to a Rocrail server (the Raspberry Pi or the balcony
   server) via  Datei/File -> "Verbinden mit..."  or a shortcut pre-pointed with -h/-p.
+  No workspace is created either, unless you pass -Workspace to build an empty one (only
+  meaningful if this machine ever hosts a layout itself).
 
   First-run install and update are the same command, mirroring the Linux script. Re-running is
   the supported update path: Rocrail/Rocview are stopped, the new build is extracted into a
@@ -122,25 +124,34 @@ if ($Check) {
     $advertised = Get-AdvertisedRevision
     $remote = Get-RemoteInfo -Url $Url
     $recordPath = Join-Path $InstallDir 'install-record.json'
+    $recorded = $null
+    if (Test-Path -LiteralPath $recordPath) {
+        try { $recorded = (Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json) } catch { $recorded = $null }
+    }
 
     Write-Log "platform        : $Build   build: $Archive"
     Write-Log "install dir     : $InstallDir"
     Write-Log "url             : $Url"
     Write-Log "installed       : $(if ($installed) { $installed } else { '<not installed>' })"
-    Write-Log "available (log) : $(if ($advertised) { $advertised } else { '<unavailable>' })"
+    Write-Log "installed from  : $(if ($recorded -and $recorded.archive_last_modified) { $recorded.archive_last_modified } else { '<not recorded>' })"
     Write-Log "available (file): $(if ($remote) { $remote.LastModified } else { '<unavailable>' })"
-    if (Test-Path -LiteralPath $recordPath) {
-        Write-Log "last installed  : $((Get-Content -LiteralPath $recordPath -Raw).Trim())"
-    }
+    Write-Log "newest overall  : $(if ($advertised) { $advertised } else { '<unavailable>' })   (any platform; informational)"
+
     if (-not $installed) {
         Write-Log 'verdict         : NOT INSTALLED'
         exit 2
     }
-    if ($advertised -and $installed -eq $advertised) {
-        Write-Log 'verdict         : up to date'
+    # The global newest revision says nothing about THIS platform's archive - platforms are
+    # published at different times - and an unreachable feed is not an update.
+    if (-not $remote -or -not $remote.LastModified) {
+        Write-Log 'verdict         : UNKNOWN - could not reach the archive, nothing was compared'
+        exit 3
+    }
+    if ($recorded -and $recorded.archive_last_modified -eq $remote.LastModified) {
+        Write-Log 'verdict         : up to date (this archive is unchanged)'
         exit 0
     }
-    Write-Log "verdict         : UPDATE AVAILABLE (installed $installed, newest $(if ($advertised) { $advertised } else { 'unknown' }))"
+    Write-Log "verdict         : UPDATE AVAILABLE (archive changed since install)"
     exit 1
 }
 
@@ -210,6 +221,11 @@ while ($true) {
     }
 }
 
+# Declared here, not inside the try: under Set-StrictMode the catch below must be able to
+# reference them even if the failure happens before they would have been assigned.
+$stage = "$InstallDir.new"
+$prev  = "$InstallDir.prev"
+
 try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($tmpZip)
@@ -230,13 +246,17 @@ try {
         }
     } finally { $zip.Dispose() }
 
-    # ------------------------------------------------------------ atomic swap
-    $stage = "$InstallDir.new"
-    $prev  = "$InstallDir.prev"
+    # ------------------------------------------------------------ stage, validate, then swap
+    # Everything that can fail happens before the current installation is moved, so a bad
+    # archive leaves a working installation in place.
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     Write-Log "Extracting to $stage"
     Expand-Archive -LiteralPath $tmpZip -DestinationPath $stage -Force
+
+    if (-not (Test-Path -LiteralPath (Join-Path $stage 'bin\rocview.exe'))) {
+        throw "the archive contains no bin\rocview.exe; refusing to swap"
+    }
 
     if (Test-Path -LiteralPath $InstallDir) {
         if (Test-Path -LiteralPath $prev) { Remove-Item -LiteralPath $prev -Recurse -Force }
@@ -249,14 +269,28 @@ try {
     Copy-Item -LiteralPath $tmpZip -Destination (Join-Path $InstallDir $Archive) -Force
     $hash = (Get-FileHash -LiteralPath $tmpZip -Algorithm SHA256).Hash.ToLower()
     $rev  = Get-InstalledRevision -Root $InstallDir
+    $remoteInfo = Get-RemoteInfo -Url $Url
     [pscustomobject]@{
         revision  = $(if ($rev) { $rev } else { 'unknown' })
         file      = $Archive
         url       = $Url
         sha256    = $hash
+        archive_last_modified = $(if ($remoteInfo) { $remoteInfo.LastModified } else { '' })
         installed = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         installed_by = 'install-windows.ps1'
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $InstallDir 'install-record.json') -Encoding ASCII
+}
+catch {
+    # A throw after the old installation was moved aside would otherwise leave this machine
+    # with NO installation. Put the previous one back and report the failure.
+    Write-Warn "installation failed: $($_.Exception.Message)"
+    if ($prev -and (Test-Path -LiteralPath $prev)) {
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $InstallDir) { Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
+        Move-Item -LiteralPath $prev -Destination $InstallDir -Force
+        Write-Warn "the previous installation was restored to $InstallDir"
+    }
+    throw
 }
 finally {
     if ($job -and $job.JobState -eq 'Transferred') { Complete-BitsTransfer -BitsJob $job }
