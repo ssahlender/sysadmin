@@ -91,3 +91,23 @@ workspace), not a port conflict.
   ZIP layout, which the current Linux archive does not contain, and it places Rocweb assets under
   `Contents/rocdata/web` on macOS, while the current app ships `Contents/Resources/web/`.
   Behaviour here was taken from the artifacts, not from the wiki's diagrams.
+
+## Verified after the delta review (2026-10-03)
+
+| Claim | How it was checked | Result |
+|-------|--------------------|--------|
+| A pre-existing install is not repointed | Dry run against a unit running `-w /data/rocrail-workspaces/rocrail-h0 -p 8061` as `User=rocrailh0`, with no sidecar present | Workspace, port, user and group adopted from the unit; the rendered unit keeps that `-w` |
+| An override that would move the workspace is refused | Same unit, plus `--workspace-dir` | Refusal naming both paths, exit 1; with `--force` it warns and continues |
+| The prefix-parent check works | `--prefix` under a mode-`777` parent, as root | Refused before anything is downloaded or moved (the check could never fire before) |
+| A missing group is caught before the swap | `--group nosuchgroup`, as root | Refused after the lock and before the download; no archive in the prefix |
+| The vendor archives ship no configuration | `unzip -Z1` on the published Debian/i64 and Windows/WIN64 archives | Root entries only; no `rocrail.ini`, `plan.xml` or `occ.xml` - `plan.xml` exists only under `demo/` and `wikidemo/` |
+| macOS can identify its build | `plistlib` on the published `Rocrail-macOS27.app.zip` | `CFBundleShortVersionString` = `26.10.3-7458`; the archive contains no `revision.info` |
+| rocweb.sh refuses a conflicting port | `--port 8051` (the server's own `-p`) and `--port 22` (sshd is listening) | Both refused before the service is stopped, with the listener shown |
+| The Windows installer updates a real install | Run on a real Windows host with `-InstallDir` pointing at a scratch directory | Revision 7454 installed, `bin/rocview.exe` present, record written, `.prev` kept |
+| Windows carry-over | User files placed in the install directory before the update | `Carried over into the new build: lic.dat, my-notes.txt`; both survived with their contents intact |
+| The Windows no-op | Run again with a record matching the live archive | `Already up to date`, exit 0, nothing downloaded |
+| BITS cannot download over PSRP | `Start-BitsTransfer` in a remote session against the published archive | Fails with `0x800704DD` ("the user has not logged on to the network") while the BITS service reports Running; the HTTP fallback then fetched the same 31,824,418-byte archive |
+
+Not verified: the macOS script refuses to run anywhere but macOS by design, so its `--check` and its
+install path are exercised only by parsing and by running its functions against the published bundle;
+and no client-issued exit-70 shutdown has been observed.
